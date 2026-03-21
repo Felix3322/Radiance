@@ -26,13 +26,13 @@ public enum AuxiliaryTextures {
             new String[]{fileNameComponents[0], "_s.", fileNameComponents[1]});
 
         pathComponents[pathComponents.length - 1] = specularFileName;
-        String specularPath = String.join("/", pathComponents)
-            .replace("textures/", "textures/specular/");
+        String specularPath = String.join("/", pathComponents);
         Identifier specularIdentifier = Identifier.of(namespace, specularPath);
         return List.of(specularIdentifier);
-    }, INativeImageExt::neoVoxelRT$getSpecularNativeImage,
-        INativeImageExt::neoVoxelRT$setSpecularNativeImage,
-        TextureTracker.GLID2SpecularGLID), NORMAL("normal", "_n", (identifier, source) -> {
+    }, INativeImageExt::radiance$getSpecularNativeImage,
+        INativeImageExt::radiance$setSpecularNativeImage,
+        TextureTracker.GLID2SpecularGLID),
+    NORMAL("normal", "_n", (identifier, source) -> {
         String namespace = identifier.getNamespace();
         String path = identifier.getPath();
         String[] pathComponents = path.split("/");
@@ -41,12 +41,12 @@ public enum AuxiliaryTextures {
             new String[]{fileNameComponents[0], "_n.", fileNameComponents[1]});
 
         pathComponents[pathComponents.length - 1] = normalFileName;
-        String normalPath = String.join("/", pathComponents)
-            .replace("textures/", "textures/normal/");
+        String normalPath = String.join("/", pathComponents);
         Identifier normalIdentifier = Identifier.of(namespace, normalPath);
         return List.of(normalIdentifier);
-    }, INativeImageExt::neoVoxelRT$getNormalNativeImage,
-        INativeImageExt::neoVoxelRT$setNormalNativeImage, TextureTracker.GLID2NormalGLID), FLAG(
+    }, INativeImageExt::radiance$getNormalNativeImage,
+        INativeImageExt::radiance$setNormalNativeImage, TextureTracker.GLID2NormalGLID),
+    FLAG(
         "flag", "_f", (identifier, source) -> {
         String namespace = identifier.getNamespace();
         String path = identifier.getPath();
@@ -60,8 +60,8 @@ public enum AuxiliaryTextures {
             .replace("textures/", "textures/flag/");
         Identifier flagIdentifier = Identifier.of(namespace, flagPath);
         return List.of(flagIdentifier);
-    }, INativeImageExt::neoVoxelRT$getFlagNativeImage,
-        INativeImageExt::neoVoxelRT$setFlagNativeImage, TextureTracker.GLID2FlagGLID);
+    }, INativeImageExt::radiance$getFlagNativeImage,
+        INativeImageExt::radiance$setFlagNativeImage, TextureTracker.GLID2FlagGLID);
 
     private static final List<AuxiliaryTextures> ALL_TEXTURES = Collections.unmodifiableList(
         Arrays.stream(values()).collect(Collectors.toList()));
@@ -86,8 +86,8 @@ public enum AuxiliaryTextures {
     public static void loadAndUpload(NativeImage source, INativeImageExt sourceExt, int level,
         int offsetX, int offsetY, int unpackSkipPixels, int unpackSkipRows, int regionWidth,
         int regionHeight, boolean blur) {
-        int targetId = sourceExt.neoVoxelRT$getTargetID();
-        Identifier identifier = sourceExt.neoVoxelRT$getIdentifier();
+        int targetId = sourceExt.radiance$getTargetID();
+        Identifier identifier = sourceExt.radiance$getIdentifier();
 
         ResourceManager resourceManager = MinecraftClient.getInstance().getResourceManager();
 
@@ -162,9 +162,9 @@ public enum AuxiliaryTextures {
                 }
 
                 if (auxiliaryTemplateImage != null) {
-                    NativeImage auxiliaryImage = ((com.radiance.mixin_related.extensions.vulkan_render_integration.INativeImageExt) (Object) auxiliaryTemplateImage).neoVoxelRT$alignTo(
+                    NativeImage auxiliaryImage = ((com.radiance.mixin_related.extensions.vulkan_render_integration.INativeImageExt) (Object) auxiliaryTemplateImage).radiance$alignTo(
                         source);
-                    ((INativeImageExt) (Object) auxiliaryImage).neoVoxelRT$setTargetID(
+                    ((INativeImageExt) (Object) auxiliaryImage).radiance$setTargetID(
                         auxiliaryTargetId);
                     if (auxiliaryTemplateImage != auxiliaryImage) {
                         auxiliaryTemplateImage.close();

@@ -489,7 +489,7 @@ public class EntityProxy {
         if (client.options.getPerspective()
             .isFirstPerson() && !bl && !client.options.hudHidden &&
             client.interactionManager.getCurrentGameMode() != GameMode.SPECTATOR) {
-            ((IHeldItemRendererExt) firstPersonRenderer).neoVoxelRT$renderItem(tickDelta,
+            ((IHeldItemRendererExt) firstPersonRenderer).radiance$renderItem(tickDelta,
                 matrixStack,
                 storageVertexConsumerProvider,
                 client.player,
@@ -529,9 +529,9 @@ public class EntityProxy {
 
         ParticleManager particleManager = MinecraftClient.getInstance().particleManager;
         IParticleManagerExt particleManagerExt = (IParticleManagerExt) particleManager;
-        Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.neoVoxelRT$getParticles();
+        Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.radiance$getParticles();
 
-        for (ParticleTextureSheet particleTextureSheet : particleManagerExt.neoVoxelRT$getTextureSheets()) {
+        for (ParticleTextureSheet particleTextureSheet : particleManagerExt.radiance$getTextureSheets()) {
             Queue<Particle> particleQueue = particles.get(particleTextureSheet);
             if (particleQueue != null && !particleQueue.isEmpty()) {
                 for (Particle particle : particleQueue) {
@@ -642,7 +642,7 @@ public class EntityProxy {
                         blockPos.getX(),
                         blockPos.getY(),
                         blockPos.getZ(),
-                        Constants.RayTracingFlags.WORLD,
+                        Constants.RayTracingFlags.FISHING_BOBBER,
                         false,
                         renderDataList);
                 }
@@ -745,6 +745,13 @@ public class EntityProxy {
         long geometryTypeAddr = memAddress(geometryTypeBB);
         int geometryTypeBaseAddr = 0;
 
+        int geometryGroupNameSize = entityRenderDataList.getTotalLayersCount() * Long.BYTES;
+        ByteBuffer geometryGroupNameBB = MemoryUtil.memAlloc(geometryGroupNameSize);
+        long geometryGroupNameAddr = memAddress(geometryGroupNameBB);
+        int geometryGroupNameBaseAddr = 0;
+        List<ByteBuffer> geometryGroupNameBuffers = new ArrayList<>(
+            entityRenderDataList.getTotalLayersCount());
+
         int geometryTextureSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
         ByteBuffer geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
         long geometryTextureAddr = memAddress(geometryTextureBB);
@@ -829,6 +836,11 @@ public class EntityProxy {
                 geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
                 geometryTypeBaseAddr += Integer.BYTES;
 
+                ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
+                geometryGroupNameBuffers.add(geometryGroupNameBuffer);
+                geometryGroupNameBB.putLong(geometryGroupNameBaseAddr, memAddress(geometryGroupNameBuffer));
+                geometryGroupNameBaseAddr += Long.BYTES;
+
                 geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
                 geometryTextureBaseAddr += Integer.BYTES;
 
@@ -861,6 +873,7 @@ public class EntityProxy {
             entityPostAddr,
             entityLayerCountAddr,
             geometryTypeAddr,
+            geometryGroupNameAddr,
             geometryTextureAddr,
             vertexFormatAddr,
             indexFormatAddr,
@@ -876,6 +889,10 @@ public class EntityProxy {
         MemoryUtil.memFree(entityPostBB);
         MemoryUtil.memFree(entityLayerCountBB);
         MemoryUtil.memFree(geometryTypeBB);
+        MemoryUtil.memFree(geometryGroupNameBB);
+        for (ByteBuffer geometryGroupNameBuffer : geometryGroupNameBuffers) {
+            MemoryUtil.memFree(geometryGroupNameBuffer);
+        }
         MemoryUtil.memFree(geometryTextureBB);
         MemoryUtil.memFree(vertexFormatBB);
         MemoryUtil.memFree(indexFormatBB);
@@ -952,6 +969,13 @@ public class EntityProxy {
         long geometryTypeAddr = memAddress(geometryTypeBB);
         int geometryTypeBaseAddr = 0;
 
+        int geometryGroupNameSize = entityRenderDataList.getTotalLayersCount() * Long.BYTES;
+        ByteBuffer geometryGroupNameBB = MemoryUtil.memAlloc(geometryGroupNameSize);
+        long geometryGroupNameAddr = memAddress(geometryGroupNameBB);
+        int geometryGroupNameBaseAddr = 0;
+        List<ByteBuffer> geometryGroupNameBuffers = new ArrayList<>(
+            entityRenderDataList.getTotalLayersCount());
+
         int geometryTextureSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
         ByteBuffer geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
         long geometryTextureAddr = memAddress(geometryTextureBB);
@@ -1036,6 +1060,11 @@ public class EntityProxy {
                 geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
                 geometryTypeBaseAddr += Integer.BYTES;
 
+                ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
+                geometryGroupNameBuffers.add(geometryGroupNameBuffer);
+                geometryGroupNameBB.putLong(geometryGroupNameBaseAddr, memAddress(geometryGroupNameBuffer));
+                geometryGroupNameBaseAddr += Long.BYTES;
+
                 geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
                 geometryTextureBaseAddr += Integer.BYTES;
 
@@ -1068,6 +1097,7 @@ public class EntityProxy {
             entityPostAddr,
             entityLayerCountAddr,
             geometryTypeAddr,
+            geometryGroupNameAddr,
             geometryTextureAddr,
             vertexFormatAddr,
             indexFormatAddr,
@@ -1083,6 +1113,10 @@ public class EntityProxy {
         MemoryUtil.memFree(entityPostBB);
         MemoryUtil.memFree(entityLayerCountBB);
         MemoryUtil.memFree(geometryTypeBB);
+        MemoryUtil.memFree(geometryGroupNameBB);
+        for (ByteBuffer geometryGroupNameBuffer : geometryGroupNameBuffers) {
+            MemoryUtil.memFree(geometryGroupNameBuffer);
+        }
         MemoryUtil.memFree(geometryTextureBB);
         MemoryUtil.memFree(vertexFormatBB);
         MemoryUtil.memFree(indexFormatBB);
@@ -1103,6 +1137,7 @@ public class EntityProxy {
         long entityPosts,
         long entityLayerCounts,
         long geometryTypes,
+        long geometryGroupNames,
         long geometryTextures,
         long vertexFormats,
         long indexFormats,

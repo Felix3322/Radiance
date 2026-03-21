@@ -4,21 +4,21 @@ import org.joml.Vector3f;
 
 public interface ILightMapManagerExt {
 
-    float neoVoxelRT$getAmbientLightFactor();
+    float radiance$getAmbientLightFactor();
 
-    float neoVoxelRT$getSkyFactor();
+    float radiance$getSkyFactor();
 
-    float neoVoxelRT$getBlockFactor();
+    float radiance$getBlockFactor();
 
-    boolean neoVoxelRT$isUseBrightLightmap();
+    boolean radiance$isUseBrightLightmap();
 
-    Vector3f neoVoxelRT$getSkyLightColor();
+    Vector3f radiance$getSkyLightColor();
 
-    float neoVoxelRT$getNightVisionFactor();
+    float radiance$getNightVisionFactor();
 
-    float neoVoxelRT$getDarknessScale();
+    float radiance$getDarknessScale();
 
-    float neoVoxelRT$getDarkenWorldFactor();
+    float radiance$getDarkenWorldFactor();
 
-    float neoVoxelRT$getBrightnessFactor();
+    float radiance$getBrightnessFactor();
 }

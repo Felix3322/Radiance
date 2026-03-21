@@ -22,7 +22,7 @@ public class ChunkBuilderBuiltChunkMixins implements IChunkBuilderBuiltChunkExt 
     ChunkBuilder field_20833;
 
     @Unique
-    public ChunkBuilder neoVoxelRT$getChunkBuilder() {
+    public ChunkBuilder radiance$getChunkBuilder() {
         return field_20833;
     }
 

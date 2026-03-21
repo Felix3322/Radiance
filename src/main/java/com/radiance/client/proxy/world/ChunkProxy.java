@@ -1,7 +1,6 @@
 package com.radiance.client.proxy.world;
 
 import static net.minecraft.client.render.VertexFormat.DrawMode.QUADS;
-import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.memAddress;
 
 import com.mojang.blaze3d.systems.VertexSorter;
@@ -35,7 +34,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
-import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 public class ChunkProxy {
 
@@ -160,11 +159,11 @@ public class ChunkProxy {
         try (var scope = scopedBlockBufferAllocatorStorage()) {
             ChunkRendererRegionBuilder chunkRendererRegionBuilder = new ChunkRendererRegionBuilder();
             IChunkBuilderBuiltChunkExt builtChunkExt = (IChunkBuilderBuiltChunkExt) builtChunk;
-            ChunkBuilder chunkBuilder = builtChunkExt.neoVoxelRT$getChunkBuilder();
+            ChunkBuilder chunkBuilder = builtChunkExt.radiance$getChunkBuilder();
             IChunkBuilderExt chunkBuilderExt = (IChunkBuilderExt) chunkBuilder;
             ChunkRendererRegion
                 chunkRendererRegion =
-                chunkRendererRegionBuilder.build(chunkBuilderExt.neoVoxelRT$getWorld(),
+                chunkRendererRegionBuilder.build(chunkBuilderExt.radiance$getWorld(),
                     ChunkSectionPos.from(builtChunk.getSectionPos()));
 
             if (chunkRendererRegion == null) {
@@ -204,7 +203,7 @@ public class ChunkProxy {
         SectionBuilder.RenderData renderData;
         synchronized (ChunkBuilder.class) {
             renderData =
-                ((IChunkBuilderExt) chunkBuilder).neoVoxelRT$getSectionBuilder()
+                ((IChunkBuilderExt) chunkBuilder).radiance$getSectionBuilder()
                     .build(chunkSectionPos, chunkRendererRegion, vertexSorter, storage);
         }
 
@@ -252,29 +251,42 @@ public class ChunkProxy {
             builtChunk.data.set(chunkData);
             builtChunkNum++;
 
-            try (MemoryStack stack = stackPush()) {
+            ByteBuffer geometryTypeBB = null;
+            ByteBuffer geometryGroupNameBB = null;
+            ByteBuffer geometryTextureBB = null;
+            ByteBuffer vertexFormatBB = null;
+            ByteBuffer vertexCountBB = null;
+            ByteBuffer verticesBB = null;
+            List<ByteBuffer> geometryGroupNameBuffers = new ArrayList<>(buffers.size());
+
+            try {
                 int geometryTypeSize = buffers.size() * Integer.BYTES;
-                ByteBuffer geometryTypeBB = stack.malloc(geometryTypeSize);
+                geometryTypeBB = MemoryUtil.memAlloc(geometryTypeSize);
                 long geometryTypeAddr = memAddress(geometryTypeBB);
                 int geometryTypeBaseAddr = 0;
 
+                int geometryGroupNameSize = buffers.size() * Long.BYTES;
+                geometryGroupNameBB = MemoryUtil.memAlloc(geometryGroupNameSize);
+                long geometryGroupNameAddr = memAddress(geometryGroupNameBB);
+                int geometryGroupNameBaseAddr = 0;
+
                 int geometryTextureSize = buffers.size() * Integer.BYTES;
-                ByteBuffer geometryTextureBB = stack.malloc(geometryTextureSize);
+                geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
                 long geometryTextureAddr = memAddress(geometryTextureBB);
                 int geometryTextureBaseAddr = 0;
 
                 int vertexFormatSize = buffers.size() * Integer.BYTES;
-                ByteBuffer vertexFormatBB = stack.malloc(vertexFormatSize);
+                vertexFormatBB = MemoryUtil.memAlloc(vertexFormatSize);
                 long vertexFormatAddr = memAddress(vertexFormatBB);
                 int vertexFormatBaseAddr = 0;
 
                 int vertexCountSize = buffers.size() * Integer.BYTES;
-                ByteBuffer vertexCountBB = stack.malloc(vertexCountSize);
+                vertexCountBB = MemoryUtil.memAlloc(vertexCountSize);
                 long vertexCountAddr = memAddress(vertexCountBB);
                 int vertexCountBaseAddr = 0;
 
                 int verticesSize = buffers.size() * Long.BYTES;
-                ByteBuffer verticesBB = stack.malloc(verticesSize);
+                verticesBB = MemoryUtil.memAlloc(verticesSize);
                 long verticesAddr = memAddress(verticesBB);
                 int verticesBaseAddr = 0;
 
@@ -311,6 +323,12 @@ public class ChunkProxy {
                     geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
                     geometryTypeBaseAddr += Integer.BYTES;
 
+                    ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
+                    geometryGroupNameBuffers.add(geometryGroupNameBuffer);
+                    geometryGroupNameBB.putLong(geometryGroupNameBaseAddr,
+                        memAddress(geometryGroupNameBuffer));
+                    geometryGroupNameBaseAddr += Long.BYTES;
+
                     geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
                     geometryTextureBaseAddr += Integer.BYTES;
 
@@ -335,11 +353,34 @@ public class ChunkProxy {
                     builtChunk.index,
                     buffers.size(),
                     geometryTypeAddr,
+                    geometryGroupNameAddr,
                     geometryTextureAddr,
                     vertexFormatAddr,
                     vertexCountAddr,
                     verticesAddr,
                     important);
+            } finally {
+                if (geometryTypeBB != null) {
+                    MemoryUtil.memFree(geometryTypeBB);
+                }
+                if (geometryGroupNameBB != null) {
+                    MemoryUtil.memFree(geometryGroupNameBB);
+                }
+                if (geometryTextureBB != null) {
+                    MemoryUtil.memFree(geometryTextureBB);
+                }
+                if (vertexFormatBB != null) {
+                    MemoryUtil.memFree(vertexFormatBB);
+                }
+                if (vertexCountBB != null) {
+                    MemoryUtil.memFree(vertexCountBB);
+                }
+                if (verticesBB != null) {
+                    MemoryUtil.memFree(verticesBB);
+                }
+                for (ByteBuffer geometryGroupNameBuffer : geometryGroupNameBuffers) {
+                    MemoryUtil.memFree(geometryGroupNameBuffer);
+                }
             }
         }
 
@@ -355,6 +396,7 @@ public class ChunkProxy {
         long index,
         int size,
         long geometryTypes,
+        long geometryGroupNames,
         long geometryTextures,
         long vertexFormats,
         long vertexCounts,

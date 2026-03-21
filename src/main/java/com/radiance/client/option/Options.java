@@ -58,8 +58,8 @@ public class Options {
     public static int upscalerQuality = 1;
     public static int denoiserMode = 1;
     public static int rayBounces = 4;
-    public static int chunkBuildingBatchSize = 2;
-    public static int chunkBuildingTotalBatches = 4;
+    public static int chunkBuildingBatchSize = 12;
+    public static int chunkBuildingTotalBatches = 12;
 
     public static void readOptions() {
         Path path = RadianceClient.radianceDir.resolve(OPTION_PROPERTIES);

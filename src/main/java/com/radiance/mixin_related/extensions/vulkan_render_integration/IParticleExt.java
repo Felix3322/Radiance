@@ -2,9 +2,9 @@ package com.radiance.mixin_related.extensions.vulkan_render_integration;
 
 public interface IParticleExt {
 
-    double neoVoxelRT$getX();
+    double radiance$getX();
 
-    double neoVoxelRT$getY();
+    double radiance$getY();
 
-    double neoVoxelRT$getZ();
+    double radiance$getZ();
 }

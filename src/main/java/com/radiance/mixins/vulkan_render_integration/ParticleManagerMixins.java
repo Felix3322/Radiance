@@ -32,12 +32,12 @@ public class ParticleManagerMixins implements IParticleManagerExt {
     private Map<ParticleTextureSheet, Queue<Particle>> particles;
 
     @Override
-    public List<ParticleTextureSheet> neoVoxelRT$getTextureSheets() {
+    public List<ParticleTextureSheet> radiance$getTextureSheets() {
         return PARTICLE_TEXTURE_SHEETS;
     }
 
     @Override
-    public Map<ParticleTextureSheet, Queue<Particle>> neoVoxelRT$getParticles() {
+    public Map<ParticleTextureSheet, Queue<Particle>> radiance$getParticles() {
         return particles;
     }
 

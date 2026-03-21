@@ -150,7 +150,7 @@ public class GameRendererMixins implements IGameRendererExt {
     }
 
     @Override
-    public Matrix4f neoVoxelRT$getRotationMatrix() {
+    public Matrix4f radiance$getRotationMatrix() {
         return viewMatrix;
     }
 

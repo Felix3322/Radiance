@@ -71,7 +71,7 @@ public class RendererProxy {
             mc.getWindow()
                 .getHeight();
         NativeImage nativeImage = new NativeImage(width, height, false);
-        ((INativeImageExt) (Object) nativeImage).neoVoxelRT$loadFromTextureImageWithoutUI(0, true);
+        ((INativeImageExt) (Object) nativeImage).radiance$loadFromTextureImageWithoutUI(0, true);
         return nativeImage;
     }
 }

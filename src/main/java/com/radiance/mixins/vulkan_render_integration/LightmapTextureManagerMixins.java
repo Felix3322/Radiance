@@ -197,39 +197,39 @@ public abstract class LightmapTextureManagerMixins implements ILightMapManagerEx
     }
     // endregion
 
-    public float neoVoxelRT$getAmbientLightFactor() {
+    public float radiance$getAmbientLightFactor() {
         return ambientLightFactor;
     }
 
-    public float neoVoxelRT$getSkyFactor() {
+    public float radiance$getSkyFactor() {
         return skyFactor;
     }
 
-    public float neoVoxelRT$getBlockFactor() {
+    public float radiance$getBlockFactor() {
         return blockFactor;
     }
 
-    public boolean neoVoxelRT$isUseBrightLightmap() {
+    public boolean radiance$isUseBrightLightmap() {
         return useBrightLightmap;
     }
 
-    public Vector3f neoVoxelRT$getSkyLightColor() {
+    public Vector3f radiance$getSkyLightColor() {
         return skyLightColor;
     }
 
-    public float neoVoxelRT$getNightVisionFactor() {
+    public float radiance$getNightVisionFactor() {
         return nightVisionFactor;
     }
 
-    public float neoVoxelRT$getDarknessScale() {
+    public float radiance$getDarknessScale() {
         return darknessScale;
     }
 
-    public float neoVoxelRT$getDarkenWorldFactor() {
+    public float radiance$getDarkenWorldFactor() {
         return darkenWorldFactor;
     }
 
-    public float neoVoxelRT$getBrightnessFactor() {
+    public float radiance$getBrightnessFactor() {
         return brightnessFactor;
     }
 }

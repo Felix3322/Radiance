@@ -18,17 +18,17 @@ public class ParticleMixins implements IParticleExt {
     protected double z;
 
     @Override
-    public double neoVoxelRT$getX() {
+    public double radiance$getX() {
         return x;
     }
 
     @Override
-    public double neoVoxelRT$getY() {
+    public double radiance$getY() {
         return y;
     }
 
     @Override
-    public double neoVoxelRT$getZ() {
+    public double radiance$getZ() {
         return z;
     }
 }

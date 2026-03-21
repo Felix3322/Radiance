@@ -226,7 +226,7 @@ public abstract class WorldRendererMixins {
             this.renderedEntities);
 
         Matrix4f viewMatrix = new Matrix4f(
-            ((IGameRendererExt) gameRenderer).neoVoxelRT$getRotationMatrix());
+            ((IGameRendererExt) gameRenderer).radiance$getRotationMatrix());
         Matrix4f effectedViewMatrix = new Matrix4f(effectedRotationMatrix);
 
         // fog
@@ -241,7 +241,7 @@ public abstract class WorldRendererMixins {
 
         TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
         OverlayTexture overlayTexture = gameRenderer.getOverlayTexture();
-        int overlayTextureID = ((IOverlayTextureExt) overlayTexture).neoVoxelRT$getTexture()
+        int overlayTextureID = ((IOverlayTextureExt) overlayTexture).radiance$getTexture()
             .getGlId();
         int endSkyTextureID = textureManager.getTexture(EndPortalBlockEntityRenderer.SKY_TEXTURE)
             .getGlId();
@@ -302,15 +302,15 @@ public abstract class WorldRendererMixins {
         BufferProxy.updateMapping();
 
         ILightMapManagerExt lightMapManagerExt = (ILightMapManagerExt) (gameRenderer.getLightmapTextureManager());
-        BufferProxy.updateLightMapUniform(lightMapManagerExt.neoVoxelRT$getAmbientLightFactor(),
-            lightMapManagerExt.neoVoxelRT$getSkyFactor(),
-            lightMapManagerExt.neoVoxelRT$getBlockFactor(),
-            lightMapManagerExt.neoVoxelRT$isUseBrightLightmap(),
-            lightMapManagerExt.neoVoxelRT$getSkyLightColor(),
-            lightMapManagerExt.neoVoxelRT$getNightVisionFactor(),
-            lightMapManagerExt.neoVoxelRT$getDarknessScale(),
-            lightMapManagerExt.neoVoxelRT$getDarkenWorldFactor(),
-            lightMapManagerExt.neoVoxelRT$getBrightnessFactor());
+        BufferProxy.updateLightMapUniform(lightMapManagerExt.radiance$getAmbientLightFactor(),
+            lightMapManagerExt.radiance$getSkyFactor(),
+            lightMapManagerExt.radiance$getBlockFactor(),
+            lightMapManagerExt.radiance$isUseBrightLightmap(),
+            lightMapManagerExt.radiance$getSkyLightColor(),
+            lightMapManagerExt.radiance$getNightVisionFactor(),
+            lightMapManagerExt.radiance$getDarknessScale(),
+            lightMapManagerExt.radiance$getDarkenWorldFactor(),
+            lightMapManagerExt.radiance$getBrightnessFactor());
 
         // Entities
         EntityProxy.queueEntitiesBuild(camera, renderedEntities, this.entityRenderDispatcher,
