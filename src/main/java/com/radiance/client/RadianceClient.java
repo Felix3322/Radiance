@@ -44,10 +44,6 @@ public class RadianceClient implements ClientModInitializer {
         // core lib
         String osName = System.getProperty("os.name");
         if (osName.toLowerCase().contains("windows")) {
-            Path libTargetPath = radianceDir.resolve("core.lib");
-            Path libResourcePath = Path.of("core.lib");
-            copyFileFromResource(libTargetPath, libResourcePath);
-
             Path dllTargetPath = radianceDir.resolve("core.dll");
             Path dllResourcePath = Path.of("core.dll");
             copyFileFromResource(dllTargetPath, dllResourcePath);
@@ -93,7 +89,13 @@ public class RadianceClient implements ClientModInitializer {
     public void copyFileFromResource(Path targetPath, Path resourcePath) {
         try (InputStream is = getClass().getResourceAsStream(toResourcePath(resourcePath))) {
             if (is == null) {
-                throw new IOException("Cannot find target path: " + resourcePath);
+                if (Files.exists(targetPath)) {
+                    LOGGER.warn("Resource {} not found in jar, using existing file {}", resourcePath,
+                        targetPath.toAbsolutePath());
+                    return;
+                }
+                throw new IOException("Required runtime file is missing from both jar and disk. Resource: "
+                    + resourcePath + ", expected existing file: " + targetPath.toAbsolutePath());
             }
 
             Files.createDirectories(targetPath.getParent());
@@ -133,7 +135,13 @@ public class RadianceClient implements ClientModInitializer {
         URL url = getClass().getResource(resourcePathStr);
 
         if (url == null) {
-            throw new RuntimeException("Resource folder not found: " + resourcePathStr);
+            if (Files.isDirectory(targetPath)) {
+                LOGGER.warn("Resource folder {} not found in jar, using existing directory {}",
+                    resourcePathStr, targetPath.toAbsolutePath());
+                return;
+            }
+            throw new RuntimeException("Required runtime folder is missing from both jar and disk. Resource: "
+                + resourcePathStr + ", expected existing directory: " + targetPath.toAbsolutePath());
         }
 
         try {
