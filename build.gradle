@@ -10,6 +10,58 @@ base {
     archivesName = project.archives_base_name
 }
 
+def radianceRuntimeDirPath = providers.gradleProperty("radianceRuntimeDir")
+    .orElse(providers.environmentVariable("RADIANCE_RUNTIME_DIR"))
+    .orNull
+def radianceRuntimeDir = radianceRuntimeDirPath ? file(radianceRuntimeDirPath) : null
+def defaultRadianceWindowsJarPath = "C:/Users/Felix/Downloads/Radiance-0.1.3-alpha-fabric-1.21.4-windows.jar"
+def radianceWindowsJarPath = providers.gradleProperty("radianceWindowsJar")
+    .orElse(providers.environmentVariable("RADIANCE_WINDOWS_JAR"))
+    .orElse(providers.provider {
+        file(defaultRadianceWindowsJarPath).exists() ? defaultRadianceWindowsJarPath : null
+    })
+    .orNull
+def radianceWindowsJar = radianceWindowsJarPath ? file(radianceWindowsJarPath) : null
+def extractedRadianceWindowsRuntimeDir = layout.buildDirectory.dir("generated/radianceRuntime/windows")
+
+def radianceWindowsJarExplicitlyConfigured =
+    gradle.startParameter.projectProperties.containsKey("radianceWindowsJar")
+        || System.getenv("RADIANCE_WINDOWS_JAR") != null
+
+tasks.register("extractRadianceWindowsRuntime") {
+    onlyIf {
+        radianceWindowsJar != null && radianceWindowsJar.exists()
+    }
+    if (radianceWindowsJar != null) {
+        inputs.file(radianceWindowsJar)
+    }
+    outputs.dir(extractedRadianceWindowsRuntimeDir)
+
+    doLast {
+        if (radianceWindowsJar == null || !radianceWindowsJar.exists()) {
+            throw new GradleException("Radiance Windows runtime jar not found: ${radianceWindowsJarPath}")
+        }
+
+        def outputDir = extractedRadianceWindowsRuntimeDir.get().asFile
+        delete(outputDir)
+        outputDir.mkdirs()
+
+        copy {
+            from(zipTree(radianceWindowsJar))
+            include "core.dll"
+            include "libxess*.dll"
+            into outputDir
+        }
+
+        def extractedCoreDll = new File(outputDir, "core.dll")
+        if (!extractedCoreDll.exists()) {
+            throw new GradleException("core.dll was not found in ${radianceWindowsJar}")
+        }
+
+        logger.lifecycle("Extracted Radiance Windows runtime from ${radianceWindowsJar} -> ${outputDir}")
+    }
+}
+
 compileJava {
     options.compilerArgs += ['-h', "${projectDir}/src/main/native/include"]
     outputs.upToDateWhen { false }
@@ -58,6 +110,35 @@ processResources {
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
     filteringCharset "UTF-8"
+
+    def runtimeDirectorySource = null
+    def mainResourcesDir = file("src/main/resources")
+    if (radianceRuntimeDir != null) {
+        if (radianceRuntimeDir.exists()) {
+            runtimeDirectorySource = radianceRuntimeDir
+        } else {
+            logger.warn("Configured radiance runtime directory does not exist: ${radianceRuntimeDir}")
+        }
+    } else if (radianceWindowsJar != null && radianceWindowsJar.exists()) {
+        dependsOn(tasks.named("extractRadianceWindowsRuntime"))
+        runtimeDirectorySource = extractedRadianceWindowsRuntimeDir
+    } else if (radianceWindowsJarExplicitlyConfigured && radianceWindowsJar != null
+        && !radianceWindowsJar.exists()) {
+        logger.warn("Configured Radiance Windows jar does not exist: ${radianceWindowsJar}")
+    }
+
+    def runtimeSourceMatchesMainResources =
+        runtimeDirectorySource instanceof File
+            && runtimeDirectorySource.canonicalFile == mainResourcesDir.canonicalFile
+
+    if (runtimeDirectorySource != null && !runtimeSourceMatchesMainResources) {
+        from(runtimeDirectorySource) {
+            include "core.dll"
+            include "libcore.so"
+            include "libxess*.dll"
+            include "shaders/**"
+        }
+    }
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,

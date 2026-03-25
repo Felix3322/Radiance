@@ -6,6 +6,7 @@ import com.radiance.client.pipeline.Pipeline;
 import com.radiance.client.proxy.vulkan.RendererProxy;
 import com.radiance.client.proxy.vulkan.TextureProxy;
 import com.radiance.client.proxy.world.ChunkProxy;
+import com.radiance.client.proxy.world.EntityProxy;
 import java.util.Optional;
 import java.util.function.Consumer;
 import net.minecraft.client.MinecraftClient;
@@ -191,6 +192,7 @@ public class MinecraftClientMixins {
     public void resetBuiltChunkNum(Screen disconnectionScreen, boolean transferring,
         CallbackInfo ci) {
         ChunkProxy.builtChunkNum = 0;
+        EntityProxy.clearReplayCaches();
     }
     // endregion
 }

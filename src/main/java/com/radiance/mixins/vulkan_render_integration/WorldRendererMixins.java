@@ -347,6 +347,7 @@ public abstract class WorldRendererMixins {
 
         // Chunks
         ChunkProxy.rebuild(camera);
+        ChunkProxy.queueSpecialGeometry(this.builtChunks, camera);
 
         this.renderedEntities.clear();
 

@@ -834,6 +834,68 @@ public class Pipeline {
 
     public static native boolean isNativeModuleAvailable(String name);
 
+    public static Module getModuleByName(String name) {
+        if (name == null) {
+            return null;
+        }
+
+        for (Module module : INSTANCE.modules) {
+            if (Objects.equals(module.name, name)) {
+                return module;
+            }
+        }
+
+        return null;
+    }
+
+    public static String getModuleAttributeValue(String moduleName, String attributeName,
+        String fallback) {
+        Module module = getModuleByName(moduleName);
+        if (module == null || module.attributeConfigs == null || attributeName == null) {
+            return fallback;
+        }
+
+        for (AttributeConfig attributeConfig : module.attributeConfigs) {
+            if (!Objects.equals(attributeConfig.name, attributeName)) {
+                continue;
+            }
+
+            return attributeConfig.value != null ? attributeConfig.value : fallback;
+        }
+
+        return fallback;
+    }
+
+    public static int getModuleAttributeIntValue(String moduleName, String attributeName,
+        int fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) {
+            return fallback;
+        }
+
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    public static boolean getModuleAttributeBooleanValue(String moduleName, String attributeName,
+        boolean fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) {
+            return fallback;
+        }
+
+        if (Objects.equals(value, "render_pipeline.true")) {
+            return true;
+        }
+        if (Objects.equals(value, "render_pipeline.false")) {
+            return false;
+        }
+
+        return Boolean.parseBoolean(value);
+    }
 
     public PipelineMode getMode() {
         return mode;
