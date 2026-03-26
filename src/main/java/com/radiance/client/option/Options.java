@@ -428,8 +428,8 @@ public class Options {
             "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.low_cost_hybrid");
         changed |= setAttr(RAY_TRACING_MODULE, RT_TERRAIN_UPDATE_INTERVAL_FRAMES, "4");
         changed |= setAttr(RAY_TRACING_MODULE, RT_ENTITY_UPDATE_INTERVAL_FRAMES, "1");
-        changed |= setAttr(RAY_TRACING_MODULE, RT_BLOCK_ENTITY_UPDATE_INTERVAL_FRAMES, "1");
-        changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_UPDATE_INTERVAL_FRAMES, "1");
+        changed |= setAttr(RAY_TRACING_MODULE, RT_BLOCK_ENTITY_UPDATE_INTERVAL_FRAMES, "2");
+        changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_UPDATE_INTERVAL_FRAMES, "3");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_CRIT_GLOW, "render_pipeline.true");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_DEATH_SMOKE_GLOW, "render_pipeline.true");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_CRIT_GLOW_STRENGTH, "0.42");
@@ -493,8 +493,8 @@ public class Options {
             "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.low_cost_hybrid");
         changed |= setAttr(RAY_TRACING_MODULE, RT_TERRAIN_UPDATE_INTERVAL_FRAMES, "3");
         changed |= setAttr(RAY_TRACING_MODULE, RT_ENTITY_UPDATE_INTERVAL_FRAMES, "1");
-        changed |= setAttr(RAY_TRACING_MODULE, RT_BLOCK_ENTITY_UPDATE_INTERVAL_FRAMES, "1");
-        changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_UPDATE_INTERVAL_FRAMES, "1");
+        changed |= setAttr(RAY_TRACING_MODULE, RT_BLOCK_ENTITY_UPDATE_INTERVAL_FRAMES, "2");
+        changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_UPDATE_INTERVAL_FRAMES, "2");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_CRIT_GLOW, "render_pipeline.true");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_DEATH_SMOKE_GLOW, "render_pipeline.true");
         changed |= setAttr(RAY_TRACING_MODULE, RT_PARTICLE_CRIT_GLOW_STRENGTH, "0.50");
