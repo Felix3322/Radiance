@@ -142,6 +142,15 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
                 }
             });
 
+        SimpleOption<Boolean> enableDlssFrameGeneration = SimpleOption.ofBoolean(
+            Options.DLSS_FRAME_GENERATION_KEY,
+            Options.dlssFrameGeneration,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setDlssFrameGeneration(value, true);
+                }
+            });
+
         SimpleOption<Integer>
             chunkBuildingBatchSize =
             new SimpleOption<>(Options.CHUNK_BUILDING_BATCH_SIZE_KEY,
@@ -236,6 +245,7 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
         this.body.addEntry(
             new CategoryVideoOptionEntry(Text.translatable(Options.CATEGORY_PIPELINE), body));
         this.body.addSingleOptionEntry(qualityLevel);
+        this.body.addSingleOptionEntry(enableDlssFrameGeneration);
         this.body.addSingleOptionEntry(pipelineSettings);
 
         ci.cancel();

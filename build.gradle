@@ -113,12 +113,18 @@ processResources {
 
     def runtimeDirectorySource = null
     def mainResourcesDir = file("src/main/resources")
+    def localRuntimeAvailable =
+        new File(mainResourcesDir, "core.dll").exists()
+            || new File(mainResourcesDir, "libcore.so").exists()
+            || new File(mainResourcesDir, "libxess.dll").exists()
     if (radianceRuntimeDir != null) {
         if (radianceRuntimeDir.exists()) {
             runtimeDirectorySource = radianceRuntimeDir
         } else {
             logger.warn("Configured radiance runtime directory does not exist: ${radianceRuntimeDir}")
         }
+    } else if (localRuntimeAvailable) {
+        runtimeDirectorySource = mainResourcesDir
     } else if (radianceWindowsJar != null && radianceWindowsJar.exists()) {
         dependsOn(tasks.named("extractRadianceWindowsRuntime"))
         runtimeDirectorySource = extractedRadianceWindowsRuntimeDir

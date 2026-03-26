@@ -36,6 +36,7 @@
   "options.video.denoiser_mode.nrd": "NRD",
   "options.video.denoiser_mode.temporal": "时间累积",
   "options.video.hdr_output": "HDR输出",
+  "options.video.dlss_frame_generation": "DLSS 插帧（实验）",
   "options.video.ray_bounces": "光线反射次数",
   "options.video.chunk_building_batch_size": "单次提交构建的区块数",
   "options.video.chunk_building_total_batches": "总构建中的提交数",

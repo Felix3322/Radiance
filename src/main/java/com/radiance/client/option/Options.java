@@ -39,6 +39,7 @@ public class Options {
     public static final String UPSCALER_QUALITY_KEY = "options.video.upscaler_quality";
     public static final String DENOISER_MODE_KEY = "options.video.denoiser_mode";
     public static final String HDR_OUTPUT_KEY = "options.video.hdr_output";
+    public static final String DLSS_FRAME_GENERATION_KEY = "options.video.dlss_frame_generation";
     public static final String RAY_BOUNCES_KEY = "options.video.ray_bounces";
     public static final String CHUNK_BUILDING_BATCH_SIZE_KEY = "options.video.chunk_building_batch_size";
     public static final String CHUNK_BUILDING_TOTAL_BATCHES_KEY = "options.video.chunk_building_total_batches";
@@ -160,6 +161,7 @@ public class Options {
     public static int upscalerQuality = 1;
     public static int denoiserMode = 1;
     public static boolean hdrOutput = false;
+    public static boolean dlssFrameGeneration = false;
     public static int rayBounces = 4;
     public static int chunkBuildingBatchSize = 14;
     public static int chunkBuildingTotalBatches = 16;
@@ -184,6 +186,8 @@ public class Options {
                 false);
             setHdrOutput(Boolean.parseBoolean(props.getProperty("hdrOutput",
                 String.valueOf(hdrOutput))), false);
+            setDlssFrameGeneration(Boolean.parseBoolean(props.getProperty("dlssFrameGeneration",
+                String.valueOf(dlssFrameGeneration))), false);
             qualityLevel = Integer.parseInt(
                 props.getProperty("qualityLevel", String.valueOf(qualityLevel)));
             setRayBounces(Integer.parseInt(props.getProperty("rayBounces",
@@ -217,6 +221,7 @@ public class Options {
         props.setProperty("rayBounces", String.valueOf(rayBounces));
         props.setProperty("chunkBuildingBatchSize", String.valueOf(chunkBuildingBatchSize));
         props.setProperty("chunkBuildingTotalBatches", String.valueOf(chunkBuildingTotalBatches));
+        props.setProperty("dlssFrameGeneration", String.valueOf(dlssFrameGeneration));
 
         try {
             Files.createDirectories(path.getParent());
@@ -289,6 +294,16 @@ public class Options {
     public static void setHdrOutput(boolean hdrOutput, boolean write) {
         Options.hdrOutput = hdrOutput;
         nativeSetHdrOutput(hdrOutput, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public native static void nativeSetDlssFrameGeneration(boolean dlssFrameGeneration, boolean write);
+
+    public static void setDlssFrameGeneration(boolean dlssFrameGeneration, boolean write) {
+        Options.dlssFrameGeneration = dlssFrameGeneration;
+        nativeSetDlssFrameGeneration(dlssFrameGeneration, write);
         if (write) {
             overwriteConfig();
         }
