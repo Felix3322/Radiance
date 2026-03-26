@@ -70,7 +70,6 @@ import net.minecraft.entity.player.BlockBreakingInfo;
 import net.minecraft.entity.projectile.FishingBobberEntity;
 import net.minecraft.util.Colors;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.Pair;
 import net.minecraft.util.crash.CrashException;
 import net.minecraft.util.crash.CrashReport;
 import net.minecraft.util.crash.CrashReportSection;
@@ -322,22 +321,25 @@ public class EntityProxy {
         queueBuild(entityStorageVertexConsumerProviders, entityRenderDataList);
     }
 
-    public static synchronized Pair<List<StorageVertexConsumerProvider>, EntityRenderDataList> queueBlockEntitiesRebuild(
-        BuiltChunkStorage chunks,
+    public static synchronized BlockEntityQueueResult queueBlockEntitiesRebuild(
+        List<ChunkBuilder.BuiltChunk> visibleBuiltChunks,
         Set<BlockEntity> noCullingBlockEntities,
         Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions,
         BlockEntityRenderDispatcher blockEntityRenderDispatcher,
         float tickDelta) {
         blockEntityReplayFrameCounter++;
         List<BlockEntityRenderEntry> blockEntityRenderEntries = collectBlockEntityRenderEntries(
-            chunks, noCullingBlockEntities, blockBreakingProgressions);
+            visibleBuiltChunks, noCullingBlockEntities, blockBreakingProgressions);
         EnumMap<BlockEntityUpdateBucket, List<BlockEntityRenderEntry>> bucketEntries =
             bucketBlockEntityRenderEntries(blockEntityRenderEntries);
-        List<StorageVertexConsumerProvider> entityStorageVertexConsumerProviders = new ArrayList<>();
-        EntityRenderDataList entityRenderDataList = new EntityRenderDataList();
-        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders =
+        List<StorageVertexConsumerProvider> freshEntityStorageVertexConsumerProviders =
             new ArrayList<>();
-        EntityRenderDataList crumblingRenderDataList = new EntityRenderDataList();
+        EntityRenderDataList freshEntityRenderDataList = new EntityRenderDataList();
+        EntityRenderDataList replayedEntityRenderDataList = new EntityRenderDataList();
+        List<StorageVertexConsumerProvider> freshCrumblingStorageVertexConsumerProviders =
+            new ArrayList<>();
+        EntityRenderDataList freshCrumblingRenderDataList = new EntityRenderDataList();
+        EntityRenderDataList replayedCrumblingRenderDataList = new EntityRenderDataList();
 
         for (BlockEntityUpdateBucket bucket : BlockEntityUpdateBucket.values()) {
             List<BlockEntityRenderEntry> entriesForBucket = bucketEntries.getOrDefault(bucket,
@@ -351,18 +353,19 @@ public class EntityProxy {
             Map<Integer, BlockEntityReplayState> blockEntityReplayStates =
                 captureBlockEntityReplayStates(entriesForBucket);
             if (entityUpdateInterval > 1 && tryReplayBlockEntities(bucket, blockEntityReplayStates,
-                entityUpdateInterval, entityRenderDataList, crumblingRenderDataList)) {
+                entityUpdateInterval, replayedEntityRenderDataList,
+                replayedCrumblingRenderDataList)) {
                 continue;
             }
 
             BlockEntityBuildBatch blockEntityBuildBatch = renderBlockEntityEntries(
                 entriesForBucket, blockEntityRenderDispatcher, tickDelta);
-            entityStorageVertexConsumerProviders.addAll(
+            freshEntityStorageVertexConsumerProviders.addAll(
                 blockEntityBuildBatch.entityStorageVertexConsumerProviders());
-            entityRenderDataList.addAll(blockEntityBuildBatch.entityRenderDataList());
-            crumblingStorageVertexConsumerProviders.addAll(
+            freshEntityRenderDataList.addAll(blockEntityBuildBatch.entityRenderDataList());
+            freshCrumblingStorageVertexConsumerProviders.addAll(
                 blockEntityBuildBatch.crumblingStorageVertexConsumerProviders());
-            crumblingRenderDataList.addAll(blockEntityBuildBatch.crumblingRenderDataList());
+            freshCrumblingRenderDataList.addAll(blockEntityBuildBatch.crumblingRenderDataList());
 
             if (entityUpdateInterval > 1 && (!blockEntityBuildBatch.entityRenderDataList().isEmpty()
                 || !blockEntityBuildBatch.crumblingRenderDataList().isEmpty())) {
@@ -374,19 +377,22 @@ public class EntityProxy {
             }
         }
 
-        if (!entityRenderDataList.isEmpty()) {
-            queueBuild(entityStorageVertexConsumerProviders, entityRenderDataList);
+        if (!replayedEntityRenderDataList.isEmpty()) {
+            queueBuildWithoutClose(replayedEntityRenderDataList);
         }
-        return new Pair<>(crumblingStorageVertexConsumerProviders, crumblingRenderDataList);
+        if (!freshEntityRenderDataList.isEmpty()) {
+            queueBuild(freshEntityStorageVertexConsumerProviders, freshEntityRenderDataList);
+        }
+        return new BlockEntityQueueResult(freshCrumblingStorageVertexConsumerProviders,
+            freshCrumblingRenderDataList, replayedCrumblingRenderDataList);
     }
 
     public static void queueCrumblingRebuild(Camera camera,
         Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions,
         BlockRenderManager blockRenderManager,
         ClientWorld world,
-        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders,
-        EntityRenderDataList crumblingRenderDataList) {
-        if (crumblingStorageVertexConsumerProviders.isEmpty()
+        BlockEntityQueueResult blockEntityQueueResult) {
+        if (blockEntityQueueResult.isEmpty()
             && blockBreakingProgressions.isEmpty()) {
             return;
         }
@@ -448,12 +454,18 @@ public class EntityProxy {
             }
         }
 
-        if (!crumblingRenderDataList.isEmpty()) {
-            if (crumblingStorageVertexConsumerProviders.isEmpty()) {
-                queueBuildWithoutClose(crumblingRenderDataList, 0.0f, Constants.Coordinates.WORLD,
+        if (!blockEntityQueueResult.replayedCrumblingRenderDataList().isEmpty()) {
+            queueBuildWithoutClose(blockEntityQueueResult.replayedCrumblingRenderDataList(), 0.0f,
+                Constants.Coordinates.WORLD, true);
+        }
+        if (!blockEntityQueueResult.freshCrumblingRenderDataList().isEmpty()) {
+            if (blockEntityQueueResult.freshCrumblingStorageVertexConsumerProviders().isEmpty()) {
+                queueBuildWithoutClose(blockEntityQueueResult.freshCrumblingRenderDataList(), 0.0f,
+                    Constants.Coordinates.WORLD,
                     true);
             } else {
-                queueBuild(crumblingStorageVertexConsumerProviders, crumblingRenderDataList, 0.0f,
+                queueBuild(blockEntityQueueResult.freshCrumblingStorageVertexConsumerProviders(),
+                    blockEntityQueueResult.freshCrumblingRenderDataList(), 0.0f,
                     Constants.Coordinates.WORLD, true);
             }
         }
@@ -517,9 +529,10 @@ public class EntityProxy {
         IParticleManagerExt particleManagerExt = (IParticleManagerExt) particleManager;
         Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.radiance$getParticles();
         EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketEntries =
-            bucketParticleRenderEntries(particleManagerExt, particles);
-        List<StorageVertexConsumerProvider> storageVertexConsumerProviders = new ArrayList<>();
-        EntityRenderDataList renderDataList = new EntityRenderDataList();
+            bucketParticleRenderEntries(particleManagerExt, particles, camera, frustum);
+        List<StorageVertexConsumerProvider> freshStorageVertexConsumerProviders = new ArrayList<>();
+        EntityRenderDataList freshRenderDataList = new EntityRenderDataList();
+        EntityRenderDataList replayedRenderDataList = new EntityRenderDataList();
 
         for (ParticleUpdateBucket bucket : ParticleUpdateBucket.values()) {
             List<ParticleRenderEntry> entriesForBucket = bucketEntries.getOrDefault(bucket,
@@ -532,19 +545,19 @@ public class EntityProxy {
             int particleUpdateInterval = particleUpdateIntervalFrames(bucket);
             ParticleReplayState particleReplayState = captureParticleReplayState(entriesForBucket);
             if (particleUpdateInterval > 1 && tryReplayParticles(bucket, particleReplayState,
-                particleUpdateInterval, renderDataList)) {
+                particleUpdateInterval, replayedRenderDataList)) {
                 continue;
             }
 
             StorageVertexConsumerProvider storageVertexConsumerProvider =
                 new StorageVertexConsumerProvider(0);
-            storageVertexConsumerProviders.add(storageVertexConsumerProvider);
-            int bucketRenderDataStart = renderDataList.size();
+            freshStorageVertexConsumerProviders.add(storageVertexConsumerProvider);
+            int bucketRenderDataStart = freshRenderDataList.size();
             renderParticles(entriesForBucket, storageVertexConsumerProvider, camera, tickDelta);
-            processWorldEntityRenderData(storageVertexConsumerProvider, bucket.ordinal(), 0, 0, 0,
-                Constants.RayTracingFlags.PARTICLE, true, renderDataList);
-            EntityRenderDataList bucketRenderDataList = sliceEntityRenderDataList(renderDataList,
-                bucketRenderDataStart);
+            processWorldEntityRenderData(storageVertexConsumerProvider, particleBucketHash(bucket),
+                0, 0, 0, Constants.RayTracingFlags.PARTICLE, true, freshRenderDataList);
+            EntityRenderDataList bucketRenderDataList = sliceEntityRenderDataList(
+                freshRenderDataList, bucketRenderDataStart);
 
             if (particleUpdateInterval > 1 && !bucketRenderDataList.isEmpty()) {
                 replaceParticleReplayCache(bucket, createParticleReplayCache(bucketRenderDataList,
@@ -554,8 +567,12 @@ public class EntityProxy {
             }
         }
 
-        if (!renderDataList.isEmpty()) {
-            queueBuild(storageVertexConsumerProviders, renderDataList, 0.0f,
+        if (!replayedRenderDataList.isEmpty()) {
+            queueBuildWithoutClose(replayedRenderDataList, 0.0f,
+                Constants.Coordinates.CAMERA_SHIFT, false);
+        }
+        if (!freshRenderDataList.isEmpty()) {
+            queueBuild(freshStorageVertexConsumerProviders, freshRenderDataList, 0.0f,
                 Constants.Coordinates.CAMERA_SHIFT, false);
         }
     }
@@ -726,8 +743,39 @@ public class EntityProxy {
     }
 
     private static List<BlockEntityRenderEntry> collectBlockEntityRenderEntries(
-        BuiltChunkStorage chunks,
+        List<ChunkBuilder.BuiltChunk> visibleBuiltChunks,
         Set<BlockEntity> noCullingBlockEntities,
+        Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions) {
+        Map<Integer, BlockEntityRenderEntry> blockEntityRenderEntries = new LinkedHashMap<>();
+        if (visibleBuiltChunks != null) {
+            for (ChunkBuilder.BuiltChunk builtChunk : visibleBuiltChunks) {
+                List<BlockEntity> list = builtChunk.getData().getBlockEntities();
+                if (list.isEmpty()) {
+                    continue;
+                }
+                for (BlockEntity blockEntity : list) {
+                    BlockEntityRenderEntry blockEntityRenderEntry = new BlockEntityRenderEntry(
+                        blockEntity,
+                        getBlockBreakingStage(blockBreakingProgressions, blockEntity.getPos()),
+                        blockEntityRenderId(blockEntity, false),
+                        blockEntityRenderId(blockEntity, true));
+                    blockEntityRenderEntries.put(blockEntityRenderEntry.mainRenderId(),
+                        blockEntityRenderEntry);
+                }
+            }
+        }
+        for (BlockEntity blockEntity : noCullingBlockEntities) {
+            BlockEntityRenderEntry blockEntityRenderEntry = new BlockEntityRenderEntry(blockEntity,
+                -1,
+                blockEntityRenderId(blockEntity, false), blockEntityRenderId(blockEntity, true));
+            blockEntityRenderEntries.putIfAbsent(blockEntityRenderEntry.mainRenderId(),
+                blockEntityRenderEntry);
+        }
+        return new ArrayList<>(blockEntityRenderEntries.values());
+    }
+
+    private static List<BlockEntityRenderEntry> collectAllChunkBlockEntityRenderEntries(
+        BuiltChunkStorage chunks,
         Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions) {
         List<BlockEntityRenderEntry> blockEntityRenderEntries = new ArrayList<>();
         for (ChunkBuilder.BuiltChunk builtChunk : chunks.chunks) {
@@ -741,10 +789,6 @@ public class EntityProxy {
                     blockEntityRenderId(blockEntity, false),
                     blockEntityRenderId(blockEntity, true)));
             }
-        }
-        for (BlockEntity blockEntity : noCullingBlockEntities) {
-            blockEntityRenderEntries.add(new BlockEntityRenderEntry(blockEntity, -1,
-                blockEntityRenderId(blockEntity, false), blockEntityRenderId(blockEntity, true)));
         }
         return blockEntityRenderEntries;
     }
@@ -895,7 +939,9 @@ public class EntityProxy {
 
     private static EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketParticleRenderEntries(
         IParticleManagerExt particleManagerExt,
-        Map<ParticleTextureSheet, Queue<Particle>> particles) {
+        Map<ParticleTextureSheet, Queue<Particle>> particles,
+        Camera camera,
+        Frustum frustum) {
         EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketEntries =
             new EnumMap<>(ParticleUpdateBucket.class);
         for (ParticleUpdateBucket bucket : ParticleUpdateBucket.values()) {
@@ -909,6 +955,9 @@ public class EntityProxy {
             }
 
             for (Particle particle : particleQueue) {
+                if (isParticleDefinitelyInvisible(particle, camera, frustum)) {
+                    continue;
+                }
                 ParticleRenderEntry particleRenderEntry = new ParticleRenderEntry(particle,
                     particleTextureSheet, false);
                 bucketEntries.get(classifyParticleUpdateBucket(particleRenderEntry))
@@ -919,6 +968,9 @@ public class EntityProxy {
         Queue<Particle> customParticleQueue = particles.get(ParticleTextureSheet.CUSTOM);
         if (customParticleQueue != null && !customParticleQueue.isEmpty()) {
             for (Particle particle : customParticleQueue) {
+                if (isParticleDefinitelyInvisible(particle, camera, frustum)) {
+                    continue;
+                }
                 ParticleRenderEntry particleRenderEntry = new ParticleRenderEntry(particle,
                     ParticleTextureSheet.CUSTOM, true);
                 bucketEntries.get(classifyParticleUpdateBucket(particleRenderEntry))
@@ -926,6 +978,22 @@ public class EntityProxy {
             }
         }
         return bucketEntries;
+    }
+
+    private static boolean isParticleDefinitelyInvisible(Particle particle, Camera camera,
+        Frustum frustum) {
+        if (particle == null) {
+            return true;
+        }
+        if (frustum == null) {
+            return false;
+        }
+
+        try {
+            return !frustum.isVisible(particle.getBoundingBox());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static ParticleUpdateBucket classifyParticleUpdateBucket(
@@ -963,6 +1031,10 @@ public class EntityProxy {
             case GENERAL -> baseInterval;
             case BACKGROUND -> Math.min(6, baseInterval + 2);
         };
+    }
+
+    private static int particleBucketHash(ParticleUpdateBucket bucket) {
+        return 0x5000 + bucket.ordinal();
     }
 
     private static void renderParticles(List<ParticleRenderEntry> particleRenderEntries,
@@ -1812,6 +1884,16 @@ public class EntityProxy {
         List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders,
         EntityRenderDataList crumblingRenderDataList) {
 
+    }
+
+    public record BlockEntityQueueResult(
+        List<StorageVertexConsumerProvider> freshCrumblingStorageVertexConsumerProviders,
+        EntityRenderDataList freshCrumblingRenderDataList,
+        EntityRenderDataList replayedCrumblingRenderDataList) {
+
+        public boolean isEmpty() {
+            return freshCrumblingRenderDataList.isEmpty() && replayedCrumblingRenderDataList.isEmpty();
+        }
     }
 
     private record ParticleRenderEntry(Particle particle, ParticleTextureSheet textureSheet,

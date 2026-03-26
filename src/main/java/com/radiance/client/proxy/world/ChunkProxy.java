@@ -65,6 +65,7 @@ public class ChunkProxy {
     private static final Map<Long, ChunkSpecialRenderData> specialChunkGeometry =
         new ConcurrentHashMap<>();
     private static final Map<Integer, Long> builtChunkBuildOrigins = new ConcurrentHashMap<>();
+    private static final Map<Integer, Long> visibleChunkFrames = new ConcurrentHashMap<>();
     private static final Map<Long, ChunkTraversalData> chunkTraversalData =
         new ConcurrentHashMap<>();
     private static final Object specialChunkGeometryLock = new Object();
@@ -82,6 +83,7 @@ public class ChunkProxy {
         ThreadLocal.withInitial(BlockBufferAllocatorStorage::new);
     public static int builtChunkNum = 0;
     private static long rebuildFrameCounter = 0L;
+    private static final long VISIBLE_REBUILD_GRACE_FRAMES = 45L;
     private static ExecutorService backgroundChunkRebuildExecutor = Executors.newFixedThreadPool(
         numNormalChunkRebuildThreads, r -> {
             Thread thread = new Thread(r);
@@ -127,6 +129,7 @@ public class ChunkProxy {
             specialChunkGeometry.clear();
         }
         builtChunkBuildOrigins.clear();
+        visibleChunkFrames.clear();
         chunkTraversalData.clear();
     }
 
@@ -139,8 +142,15 @@ public class ChunkProxy {
             sectionPos.getSectionZ(), lightTypeOrdinal);
     }
 
-    public static void rebuild(Camera camera) {
+    public static void rebuild(Camera camera, List<ChunkBuilder.BuiltChunk> visibleBuiltChunks) {
         rebuildFrameCounter++;
+        if (visibleBuiltChunks != null) {
+            for (ChunkBuilder.BuiltChunk visibleBuiltChunk : visibleBuiltChunks) {
+                if (visibleBuiltChunk != null) {
+                    visibleChunkFrames.put(visibleBuiltChunk.index, rebuildFrameCounter);
+                }
+            }
+        }
 
         BlockPos cameraBlockPos = camera.getBlockPos();
         List<Integer> processedChunks = new ArrayList<>();
@@ -164,8 +174,15 @@ public class ChunkProxy {
             boolean isImportant = chunkCenterPos.getSquaredDistance(cameraBlockPos) < 768.0
                 || builtChunk.needsImportantRebuild();
             long chunkOriginKey = builtChunk.getOrigin().asLong();
+            long lastVisibleFrame = visibleChunkFrames.getOrDefault(builtChunk.index,
+                Long.MIN_VALUE);
+            boolean recentlyVisible = lastVisibleFrame != Long.MIN_VALUE
+                && rebuildFrameCounter - lastVisibleFrame <= VISIBLE_REBUILD_GRACE_FRAMES;
 
             if (!isImportant) {
+                if (!recentlyVisible) {
+                    continue;
+                }
                 if (chunkOriginKey == builtChunkBuildOrigins.getOrDefault(builtChunk.index,
                     Long.MIN_VALUE)) {
                     int updateInterval = RayTracingTuning.terrainUpdateIntervalFrames(
