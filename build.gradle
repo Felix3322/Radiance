@@ -132,6 +132,11 @@ processResources {
             && runtimeDirectorySource.canonicalFile == mainResourcesDir.canonicalFile
 
     if (runtimeDirectorySource != null && !runtimeSourceMatchesMainResources) {
+        exclude "core.dll"
+        exclude "libcore.so"
+        exclude "libxess*.dll"
+        exclude "shaders/**"
+
         from(runtimeDirectorySource) {
             include "core.dll"
             include "libcore.so"
