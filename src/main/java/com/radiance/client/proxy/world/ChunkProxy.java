@@ -6,8 +6,10 @@ import static org.lwjgl.system.MemoryUtil.memAddress;
 import com.mojang.blaze3d.systems.VertexSorter;
 import com.radiance.client.constant.Constants;
 import com.radiance.client.proxy.vulkan.BufferProxy;
+import com.radiance.client.texture.TextureTracker;
 import com.radiance.mixin_related.extensions.vulkan_render_integration.IChunkBuilderBuiltChunkExt;
 import com.radiance.mixin_related.extensions.vulkan_render_integration.IChunkBuilderExt;
+import com.radiance.mixin_related.extensions.vulkan_render_integration.IBlockColorsExt;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,6 +33,7 @@ import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.chunk.ChunkRendererRegion;
 import net.minecraft.client.render.chunk.ChunkRendererRegionBuilder;
 import net.minecraft.client.render.chunk.SectionBuilder;
+import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.texture.MissingSprite;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.texture.TextureManager;
@@ -41,6 +44,9 @@ import net.minecraft.util.math.Vec3d;
 import org.lwjgl.system.MemoryUtil;
 
 public class ChunkProxy {
+
+    private static final long FNV64_OFFSET_BASIS = 0xcbf29ce484222325L;
+    private static final long FNV64_PRIME = 0x100000001b3L;
 
     public static final ChunkBuilder.ChunkData PROCESSED = new ChunkBuilder.ChunkData() {
         @Override
@@ -126,6 +132,11 @@ public class ChunkProxy {
 
     public static void enqueueRebuild(ChunkBuilder.BuiltChunk chunk) {
         rebuildQueue.put(chunk.index, chunk);
+    }
+
+    public static void markLightDirtySection(ChunkSectionPos sectionPos, int lightTypeOrdinal) {
+        markLightDirtySection(sectionPos.getSectionX(), sectionPos.getSectionY(),
+            sectionPos.getSectionZ(), lightTypeOrdinal);
     }
 
     public static void rebuild(Camera camera) {
@@ -263,6 +274,7 @@ public class ChunkProxy {
 
         Map<RenderLayer, BuiltBuffer> buffers = preprocessChunkBuffers(renderData.buffers);
         builtChunk.setNoCullingBlockEntities(renderData.noCullingBlockEntities);
+        long lightStateHash = computeLightStateHash(chunkRendererRegion, chunkSectionPos);
         double distanceChunks = Math.sqrt(
             builtChunk.getOrigin().add(8, 8, 8).getSquaredDistance(vec3d.x, vec3d.y, vec3d.z))
             / 16.0;
@@ -381,10 +393,8 @@ public class ChunkProxy {
 
                     int geometryTypeID = Constants.GeometryTypes.getGeometryType(renderLayer,
                         RayTracingTuning.shouldReflectBlasLayer(renderLayer)).getValue();
-                    int geometryTextureID = textureManager.getTexture(
-                            ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId().orElse(
-                                MissingSprite.getMissingSpriteId()))
-                        .getGlId();
+                    int geometryTextureID = TextureTracker.getRenderLayerTextureGlId(renderLayer,
+                        textureManager, MissingSprite.getMissingSpriteId());
                     int vertexFormatID = Constants.VertexFormats.getValue(
                         vertexBuffer.getDrawParameters().format());
 
@@ -423,6 +433,7 @@ public class ChunkProxy {
                     vertexFormatAddr,
                     vertexCountAddr,
                     verticesAddr,
+                    lightStateHash,
                     important);
             } finally {
                 if (geometryTypeBB != null) {
@@ -584,6 +595,55 @@ public class ChunkProxy {
         return chunkTraversalData;
     }
 
+    private static long computeLightStateHash(ChunkRendererRegion chunkRendererRegion,
+        ChunkSectionPos chunkSectionPos) {
+        BlockPos minPos = chunkSectionPos.getMinPos();
+        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        BlockColors blockColors = MinecraftClient.getInstance().getBlockColors();
+        IBlockColorsExt blockColorsExt =
+            blockColors instanceof IBlockColorsExt ext ? ext : null;
+        long hash = FNV64_OFFSET_BASIS;
+
+        for (int localZ = 0; localZ < 16; localZ++) {
+            for (int localY = 0; localY < 16; localY++) {
+                for (int localX = 0; localX < 16; localX++) {
+                    mutable.set(minPos.getX() + localX, minPos.getY() + localY,
+                        minPos.getZ() + localZ);
+                    BlockState blockState = chunkRendererRegion.getBlockState(mutable);
+                    int stateId = Block.getRawIdFromState(blockState);
+                    int blockLight = chunkRendererRegion.getLightLevel(
+                        net.minecraft.world.LightType.BLOCK, mutable);
+                    int skyLight = chunkRendererRegion.getLightLevel(
+                        net.minecraft.world.LightType.SKY, mutable);
+                    int luminance = blockState.getLuminance();
+                    int emissiveHint = 0;
+                    if (blockColorsExt != null && !blockState.isAir()) {
+                        float emission = blockColorsExt.radiance$getEmission(blockState,
+                            chunkRendererRegion, mutable, 0);
+                        emissiveHint = Math.max(0, Math.min(255, Math.round(emission * 64.0f)));
+                    }
+
+                    hash = mixLightHash(hash, stateId);
+                    hash = mixLightHash(hash,
+                        blockLight | (skyLight << 4) | (luminance << 8) | (emissiveHint << 16));
+                }
+            }
+        }
+        return hash;
+    }
+
+    private static long mixLightHash(long hash, int value) {
+        hash ^= (value & 0xFF);
+        hash *= FNV64_PRIME;
+        hash ^= ((value >>> 8) & 0xFF);
+        hash *= FNV64_PRIME;
+        hash ^= ((value >>> 16) & 0xFF);
+        hash *= FNV64_PRIME;
+        hash ^= ((value >>> 24) & 0xFF);
+        hash *= FNV64_PRIME;
+        return hash;
+    }
+
     private static Map<RenderLayer, BuiltBuffer> preprocessChunkBuffers(
         Map<RenderLayer, BuiltBuffer> buffers) {
         if (!RayTracingTuning.shouldAttemptTerrainMeshingOptimization() || buffers.isEmpty()) {
@@ -633,6 +693,7 @@ public class ChunkProxy {
         long vertexFormats,
         long vertexCounts,
         long vertices,
+        long lightStateHash,
         boolean important);
 
     public static native boolean isChunkReady(long index);
@@ -642,6 +703,9 @@ public class ChunkProxy {
     }
 
     public static native void invalidateSingle(long index);
+
+    public static native void markLightDirtySection(int sectionX, int sectionY, int sectionZ,
+        int lightType);
 
     private static final class ChunkSpecialRenderData {
 
