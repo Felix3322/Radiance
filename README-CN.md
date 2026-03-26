@@ -80,12 +80,19 @@ git clone https://github.com/Minecraft-Radiance/MCVR.git
 
 最后，用`./gradlew build`构建。
 
+# 设置文档
+
+当前所有模块设置的中文参考文档见：
+
+- [`docs/SETTINGS_REFERENCE.zh-CN.md`](docs/SETTINGS_REFERENCE.zh-CN.md)
+
 # Todo列表
 
 - [ ] 移植到更多版本和mod加载器（WIP，最高优先级)
 - [x] XESS支持
-- [ ] 帧生成
-- [ ] HDR
+- [ ] 实验性帧生成（NVIDIA + Windows + Vulkan，进行中）
+- [x] HDR（实验性 scRGB 输出）
+- [ ] 第一人称手的影子会显示在手持物品上
 
 以及更多...
 

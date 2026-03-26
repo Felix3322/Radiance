@@ -83,12 +83,18 @@ Use `cmake` to build it and install it. Please refer to [this](https://github.co
 
 Finally, build with `./gradlew build`.
 
+# Settings Reference
+
+A Chinese settings reference covering all current module options is available at:
+
+- [`docs/SETTINGS_REFERENCE.zh-CN.md`](docs/SETTINGS_REFERENCE.zh-CN.md)
+
 # TODO List
 
 - [ ] port to more versions and mod loaders (WIP, first priority)
 - [x] XESS support
-- [ ] Frame Generation
-- [ ] HDR
+- [ ] Experimental Frame Generation (NVIDIA + Windows + Vulkan, WIP)
+- [x] HDR (Experimental scRGB output)
 
 And more...
 
