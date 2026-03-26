@@ -8,8 +8,10 @@ import com.mojang.serialization.Codec;
 import com.radiance.client.gui.PotentialValuesBasedCallbacksNoValue;
 import com.radiance.client.gui.RenderPipelineScreen;
 import com.radiance.client.option.Options;
+import com.radiance.client.option.QualityLevel;
 import com.radiance.client.util.CategoryVideoOptionEntry;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.option.VideoOptionsScreen;
@@ -133,6 +135,13 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
                 }
             });
 
+        SimpleOption<Boolean> enableHdrOutput = SimpleOption.ofBoolean(Options.HDR_OUTPUT_KEY,
+            Options.hdrOutput, value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setHdrOutput(value, true);
+                }
+            });
+
         SimpleOption<Integer>
             chunkBuildingBatchSize =
             new SimpleOption<>(Options.CHUNK_BUILDING_BATCH_SIZE_KEY,
@@ -169,6 +178,19 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
                     .setScreen(new RenderPipelineScreen((VideoOptionsScreen) (Object) this));
             });
 
+        SimpleOption<QualityLevel> qualityLevel = new SimpleOption<>(Options.QUALITY_LEVEL_KEY,
+            SimpleOption.emptyTooltip(),
+            SimpleOption.enumValueText(),
+            new SimpleOption.PotentialValuesBasedCallbacks<>(List.of(
+                QualityLevel.FLUENT,
+                QualityLevel.PERFORMANCE,
+                QualityLevel.BALANCED,
+                QualityLevel.HIGH,
+                QualityLevel.ULTRA,
+                QualityLevel.EXTREME), QualityLevel.Codec),
+            QualityLevel.fromId(Options.qualityLevel),
+            value -> Options.setQualityLevel(value, true));
+
         // Adding categories and options
         this.body.addEntry(
             new CategoryVideoOptionEntry(Text.translatable(Options.CATEGORY_GAMEPLAY), body));
@@ -200,6 +222,7 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
             maxFps, //
             inactivityFpsLimit, //
             enableVsync, //
+            enableHdrOutput, //
             gameOptions.getFullscreen(), //
         };
         this.body.addAll(optionsWindow);
@@ -212,6 +235,7 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
 
         this.body.addEntry(
             new CategoryVideoOptionEntry(Text.translatable(Options.CATEGORY_PIPELINE), body));
+        this.body.addSingleOptionEntry(qualityLevel);
         this.body.addSingleOptionEntry(pipelineSettings);
 
         ci.cancel();

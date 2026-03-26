@@ -62,6 +62,7 @@ public class MinecraftClientMixins {
         }
 
         Pipeline.loadPipeline();
+        Options.applyQualityProfile(false);
         Pipeline.build();
     }
 
