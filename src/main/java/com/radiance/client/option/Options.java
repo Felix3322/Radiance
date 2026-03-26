@@ -363,19 +363,17 @@ public class Options {
     }
 
     private static String selectPresetForQuality(QualityLevel level) {
-        if (Pipeline.isPresetAvailable(Presets.RT_DLSSRR.key)) {
-            return Presets.RT_DLSSRR.key;
-        }
-
         return switch (level) {
             case HIGH, ULTRA, EXTREME -> firstAvailablePreset(
+                Presets.RT_DLSSRR.key,
                 Presets.RT_NRD_XESS.key,
                 Presets.RT_NRD_FSR.key,
                 Presets.RT_NRD.key);
             default -> firstAvailablePreset(
                 Presets.RT_NRD_FSR.key,
                 Presets.RT_NRD_XESS.key,
-                Presets.RT_NRD.key);
+                Presets.RT_NRD.key,
+                Presets.RT_DLSSRR.key);
         };
     }
 
@@ -390,7 +388,7 @@ public class Options {
 
     private static boolean applyFluentQualityProfile() {
         setRayBounces(2, false);
-        dlssMode = 0;
+        dlssMode = 1;
         upscalerQuality = 3;
         denoiserMode = 2;
 
