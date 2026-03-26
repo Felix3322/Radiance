@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
@@ -520,35 +521,37 @@ public class EntityProxy {
 
     public static void queueParticleRebuild(Camera camera, float tickDelta, Frustum frustum) {
         particleReplayFrameCounter++;
-        int entityUpdateInterval = RayTracingTuning.entityUpdateIntervalFrames();
+        int particleUpdateInterval = RayTracingTuning.particleUpdateIntervalFrames();
         ParticleManager particleManager = MinecraftClient.getInstance().particleManager;
         IParticleManagerExt particleManagerExt = (IParticleManagerExt) particleManager;
         Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.radiance$getParticles();
         ParticleReplayState particleReplayState = captureParticleReplayState(particleManagerExt,
             particles);
-        if (entityUpdateInterval > 1 && tryReplayParticles(particleReplayState,
-            entityUpdateInterval)) {
+        if (particleUpdateInterval > 1 && tryReplayParticles(particleReplayState,
+            particleUpdateInterval)) {
             return;
         }
-        if (entityUpdateInterval <= 1) {
+        if (particleUpdateInterval <= 1) {
             clearParticleReplayCache();
         }
 
         List<StorageVertexConsumerProvider> storageVertexConsumerProviders = new ArrayList<>();
         EntityRenderDataList renderDataList = new EntityRenderDataList();
 
-        StorageVertexConsumerProvider postStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+        StorageVertexConsumerProvider storageVertexConsumerProvider = new StorageVertexConsumerProvider(
             0);
-        storageVertexConsumerProviders.add(postStorageVertexConsumerProvider);
+        storageVertexConsumerProviders.add(storageVertexConsumerProvider);
 
         for (ParticleTextureSheet particleTextureSheet : particleManagerExt.radiance$getTextureSheets()) {
             Queue<Particle> particleQueue = particles.get(particleTextureSheet);
             if (particleQueue != null && !particleQueue.isEmpty()) {
                 for (Particle particle : particleQueue) {
+                    ParticleVertexConsumerProvider particleVertexConsumerProvider =
+                        new ParticleVertexConsumerProvider(storageVertexConsumerProvider, particle);
 
                     VertexConsumer
                         vertexConsumer =
-                        postStorageVertexConsumerProvider.getBuffer(
+                        particleVertexConsumerProvider.getBuffer(
                             Objects.requireNonNull(
                                 particleTextureSheet.renderType()));
 
@@ -566,20 +569,16 @@ public class EntityProxy {
             }
         }
 
-        processPostEntityRenderData(postStorageVertexConsumerProvider, 0, 0, 0, 0, renderDataList);
-
-        StorageVertexConsumerProvider storageVertexConsumerProvider = new StorageVertexConsumerProvider(
-            0);
-        storageVertexConsumerProviders.add(storageVertexConsumerProvider);
-
         Queue<Particle> customParticleQueue = particles.get(ParticleTextureSheet.CUSTOM);
         if (customParticleQueue != null && !customParticleQueue.isEmpty()) {
             for (Particle particle : customParticleQueue) {
 
                 MatrixStack matrixStack = new MatrixStack();
+                ParticleVertexConsumerProvider particleVertexConsumerProvider =
+                    new ParticleVertexConsumerProvider(storageVertexConsumerProvider, particle);
 
                 try {
-                    particle.renderCustom(matrixStack, storageVertexConsumerProvider, camera,
+                    particle.renderCustom(matrixStack, particleVertexConsumerProvider, camera,
                         tickDelta);
                 } catch (Throwable var10) {
                     CrashReport crashReport = CrashReport.create(var10, "Rendering Particle");
@@ -595,7 +594,7 @@ public class EntityProxy {
         processWorldEntityRenderData(storageVertexConsumerProvider, 0, 0, 0, 0,
             Constants.RayTracingFlags.PARTICLE, true, renderDataList);
 
-        if (entityUpdateInterval > 1 && !renderDataList.isEmpty()) {
+        if (particleUpdateInterval > 1 && !renderDataList.isEmpty()) {
             replaceParticleReplayCache(createParticleReplayCache(renderDataList, particleReplayState));
         } else {
             clearParticleReplayCache();
@@ -839,6 +838,44 @@ public class EntityProxy {
         }
         return new ParticleReplayState(regularParticleCount + customParticleCount,
             customParticleCount, signature);
+    }
+
+    private static float particleEmissionStrength(Particle particle) {
+        String particleName = particle.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        if (particleName.contains("soul")) {
+            return 1.6f;
+        }
+        if (particleName.contains("flame") || particleName.contains("lava")
+            || particleName.contains("campfire")) {
+            return 1.35f;
+        }
+        if (particleName.contains("endrod") || particleName.contains("end_rod")
+            || particleName.contains("glow") || particleName.contains("firework")
+            || particleName.contains("spark") || particleName.contains("electric")) {
+            return 1.15f;
+        }
+        if (particleName.contains("portal") || particleName.contains("dragon")
+            || particleName.contains("sculk")) {
+            return 0.85f;
+        }
+        if (particleName.contains("spell") || particleName.contains("effect")
+            || particleName.contains("potion")) {
+            return 0.55f;
+        }
+        if (particleName.contains("crit") || particleName.contains("ench")) {
+            return RayTracingTuning.critParticlesGlowStrength();
+        }
+        if (particleName.contains("poof") || particleName.contains("smoke")) {
+            return RayTracingTuning.deathSmokeParticlesGlowStrength();
+        }
+        if (particleName.contains("redstone") || particleName.contains("dust")) {
+            return 0.28f;
+        }
+        if (particleName.contains("wax") || particleName.contains("nautilus")
+            || particleName.contains("composter")) {
+            return 0.18f;
+        }
+        return 0.0f;
     }
 
     private static int determineWorldEntityRtFlag(Camera camera, Entity entity) {
@@ -1642,6 +1679,121 @@ public class EntityProxy {
     private record BlockEntityReplayState(double x, double y, double z,
                                           int signature) implements PositionedReplayState {
 
+    }
+
+    private static final class ParticleVertexConsumerProvider implements VertexConsumerProvider {
+
+        private final StorageVertexConsumerProvider delegate;
+        private final float emissionStrength;
+        private final Map<RenderLayer, VertexConsumer> wrappedConsumers = new HashMap<>();
+
+        private ParticleVertexConsumerProvider(StorageVertexConsumerProvider delegate,
+            Particle particle) {
+            this.delegate = delegate;
+            this.emissionStrength = particleEmissionStrength(particle);
+        }
+
+        @Override
+        public VertexConsumer getBuffer(RenderLayer renderLayer) {
+            VertexConsumer vertexConsumer = delegate.getBuffer(renderLayer);
+            if (!(vertexConsumer instanceof PBRVertexConsumer pbrVertexConsumer)) {
+                return vertexConsumer;
+            }
+            pbrVertexConsumer.materialHints(PBRVertexConsumer.MATERIAL_HINT_FORCE_NO_PBR);
+            if (emissionStrength <= 0.0f) {
+                return pbrVertexConsumer;
+            }
+            return wrappedConsumers.computeIfAbsent(renderLayer,
+                unused -> new ParticleGlowVertexConsumer(pbrVertexConsumer, renderLayer,
+                    emissionStrength));
+        }
+    }
+
+    private static final class ParticleGlowVertexConsumer implements VertexConsumer {
+
+        private final PBRVertexConsumer delegate;
+        private final float emissionStrength;
+        private final float layerEmissionMultiplier;
+        private int red = 255;
+        private int green = 255;
+        private int blue = 255;
+        private int alpha = 255;
+        private int lightU = 240;
+        private int lightV = 240;
+
+        private ParticleGlowVertexConsumer(PBRVertexConsumer delegate, RenderLayer renderLayer,
+            float emissionStrength) {
+            this.delegate = delegate;
+            this.emissionStrength = emissionStrength;
+            String layerName = renderLayer.name.toLowerCase(Locale.ROOT);
+            if (layerName.contains("lit")) {
+                this.layerEmissionMultiplier = 1.35f;
+            } else if (layerName.contains("particle")) {
+                this.layerEmissionMultiplier = 1.0f;
+            } else {
+                this.layerEmissionMultiplier = 0.8f;
+            }
+        }
+
+        @Override
+        public VertexConsumer vertex(float x, float y, float z) {
+            red = 255;
+            green = 255;
+            blue = 255;
+            alpha = 255;
+            lightU = 240;
+            lightV = 240;
+            delegate.vertex(x, y, z);
+            applyEmission();
+            return this;
+        }
+
+        @Override
+        public VertexConsumer color(int red, int green, int blue, int alpha) {
+            this.red = red;
+            this.green = green;
+            this.blue = blue;
+            this.alpha = alpha;
+            delegate.color(red, green, blue, alpha);
+            applyEmission();
+            return this;
+        }
+
+        @Override
+        public VertexConsumer texture(float u, float v) {
+            delegate.texture(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer overlay(int u, int v) {
+            delegate.overlay(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer light(int u, int v) {
+            this.lightU = u;
+            this.lightV = v;
+            delegate.light(u, v);
+            applyEmission();
+            return this;
+        }
+
+        @Override
+        public VertexConsumer normal(float x, float y, float z) {
+            delegate.normal(x, y, z);
+            return this;
+        }
+
+        private void applyEmission() {
+            float alphaFactor = alpha / 255.0f;
+            float maxChannel = Math.max(red, Math.max(green, blue)) / 255.0f;
+            float lightFactor = MathHelper.clamp(Math.max(lightU, lightV) / 240.0f, 0.0f, 1.0f);
+            float emission = emissionStrength * layerEmissionMultiplier * alphaFactor
+                * Math.max(0.2f, maxChannel) * (0.45f + 0.55f * lightFactor);
+            delegate.albedoEmission(emission);
+        }
     }
 
     private record ParticleReplayState(int totalParticleCount, int customParticleCount,

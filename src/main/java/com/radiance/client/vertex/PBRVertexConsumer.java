@@ -44,6 +44,7 @@ public class PBRVertexConsumer implements VertexConsumer {
     private static final int ALPHA_MODE_OPAQUE = 0;
     private static final int ALPHA_MODE_CUTOUT = 1;
     private static final int ALPHA_MODE_TRANSPARENT = 2;
+    public static final int MATERIAL_HINT_FORCE_NO_PBR = 1 << 0;
 
     private final BufferAllocator allocator;
     private final VertexFormat format;
@@ -60,6 +61,7 @@ public class PBRVertexConsumer implements VertexConsumer {
     private boolean building = true;
     private int textureID;
     private final int alphaMode;
+    private int materialHints = 0;
     private float baseX = 0;
     private float baseY = 0;
     private float baseZ = 0;
@@ -119,6 +121,10 @@ public class PBRVertexConsumer implements VertexConsumer {
             return ALPHA_MODE_OPAQUE;
         }
 
+        if (multiPhase.name.contains("particle") || multiPhase.name.contains("weather")) {
+            return ALPHA_MODE_TRANSPARENT;
+        }
+
         if (multiPhase.name.contains("cutout")) {
             return ALPHA_MODE_CUTOUT;
         }
@@ -136,6 +142,11 @@ public class PBRVertexConsumer implements VertexConsumer {
 
     public int getVertexCount() {
         return this.vertexCount;
+    }
+
+    public PBRVertexConsumer materialHints(int materialHints) {
+        this.materialHints = Math.max(materialHints, 0);
+        return this;
     }
 
     public void setBase(float x, float y, float z) {
@@ -206,8 +217,8 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(ptr + offBase, baseX);
             MemoryUtil.memPutFloat(ptr + offBase + 4L, baseY);
             MemoryUtil.memPutFloat(ptr + offBase + 8L, baseZ);
-            // Reuse the trailing padding word after postBase for alpha mode.
-            putInt(ptr + offBase + 12L, this.alphaMode);
+            // Reuse the trailing padding word after postBase for alpha mode and material hints.
+            putInt(ptr + offBase + 12L, this.alphaMode | (this.materialHints << 8));
         }
 
         return ptr;
@@ -234,8 +245,8 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(ptr + offBase, baseX);
             MemoryUtil.memPutFloat(ptr + offBase + 4L, baseY);
             MemoryUtil.memPutFloat(ptr + offBase + 8L, baseZ);
-            // Reuse the trailing padding word after postBase for alpha mode.
-            putInt(ptr + offBase + 12L, this.alphaMode);
+            // Reuse the trailing padding word after postBase for alpha mode and material hints.
+            putInt(ptr + offBase + 12L, this.alphaMode | (this.materialHints << 8));
         }
 
         if (glintTextureID != 0) {

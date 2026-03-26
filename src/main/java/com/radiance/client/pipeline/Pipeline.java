@@ -45,6 +45,7 @@ public class Pipeline {
 
     private PipelineMode mode = PipelineMode.PRESET;
     private String activePresetName = null;
+    private static boolean buildRecoveryInProgress = false;
 
     private Pipeline() {
     }
@@ -197,7 +198,8 @@ public class Pipeline {
     }
 
     public static void connectOutput(ImageConfig src) {
-        if (!Objects.equals(src.format, "R8G8B8A8_UNORM")) {
+        if (!Objects.equals(src.format, "R8G8B8A8_UNORM")
+            && !Objects.equals(src.format, "R16G16B16A16_SFLOAT")) {
             throw new RuntimeException("Invalid output format.");
         }
         src.finalOutput = true;
@@ -295,8 +297,22 @@ public class Pipeline {
 
             buildNative(sortedModules, imageFormatList, configToImageIdMap, moduleAttributes);
         } catch (Exception e) {
-            RadianceClient.LOGGER.error(e.toString());
-            Pipeline.loadPipeline();
+            RadianceClient.LOGGER.error("Failed to build render pipeline", e);
+            if (!buildRecoveryInProgress) {
+                buildRecoveryInProgress = true;
+                try {
+                    clear();
+                    assembleBestAvailablePreset(
+                        "Pipeline build failed (" + e.getMessage() + ").");
+                    build();
+                    return;
+                } catch (Exception recoveryException) {
+                    RadianceClient.LOGGER.error("Fallback pipeline build also failed",
+                        recoveryException);
+                } finally {
+                    buildRecoveryInProgress = false;
+                }
+            }
         } finally {
             savePipeline();
         }
@@ -880,6 +896,20 @@ public class Pipeline {
         }
     }
 
+    public static float getModuleAttributeFloatValue(String moduleName, String attributeName,
+        float fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) {
+            return fallback;
+        }
+
+        try {
+            return Float.parseFloat(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
     public static boolean getModuleAttributeBooleanValue(String moduleName, String attributeName,
         boolean fallback) {
         String value = getModuleAttributeValue(moduleName, attributeName, null);
@@ -895,6 +925,30 @@ public class Pipeline {
         }
 
         return Boolean.parseBoolean(value);
+    }
+
+    public static boolean setModuleAttributeValue(String moduleName, String attributeName,
+        String value) {
+        Module module = getModuleByName(moduleName);
+        if (module == null || module.attributeConfigs == null || attributeName == null) {
+            return false;
+        }
+
+        for (AttributeConfig attributeConfig : module.attributeConfigs) {
+            if (!Objects.equals(attributeConfig.name, attributeName)) {
+                continue;
+            }
+
+            String normalizedValue = value == null ? "" : value;
+            if (Objects.equals(attributeConfig.value, normalizedValue)) {
+                return false;
+            }
+
+            attributeConfig.value = normalizedValue;
+            return true;
+        }
+
+        return false;
     }
 
     public PipelineMode getMode() {
@@ -926,6 +980,13 @@ public class Pipeline {
     }
 
     public static void switchToPresetMode(String presetName) {
+        preparePresetMode(presetName);
+
+        savePipeline();
+        build();
+    }
+
+    public static void preparePresetMode(String presetName) {
         List<PresetStoredModule> carryOverModules = capturePresetModules();
 
         INSTANCE.mode = PipelineMode.PRESET;
@@ -941,9 +1002,6 @@ public class Pipeline {
         }
 
         applyPresetModuleOverrides(carryOverModules);
-
-        savePipeline();
-        build();
     }
 
     public static void assemblePreset(String presetName) {

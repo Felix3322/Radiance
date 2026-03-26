@@ -38,7 +38,8 @@ public class DirectoryAtlasSourceMixins {
 
             Identifier identifier2 = resourceFinder.toResourceId(identifier)
                 .withPrefixedPath(this.prefix);
-            if (identifier2.getPath().endsWith("_s") || identifier2.getPath().endsWith("_n")) {
+            if (identifier2.getPath().endsWith("_s") || identifier2.getPath().endsWith("_n")
+                || identifier2.getPath().endsWith("_f")) {
                 continue;
             }
             regions.add(identifier2, resource);

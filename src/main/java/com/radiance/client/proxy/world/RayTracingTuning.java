@@ -43,6 +43,14 @@ final class RayTracingTuning {
         "render_pipeline.module.ray_tracing.attribute.block_entity_update_interval_frames";
     private static final String ATTR_PARTICLE_UPDATE_INTERVAL_FRAMES =
         "render_pipeline.module.ray_tracing.attribute.particle_update_interval_frames";
+    private static final String ATTR_PARTICLE_CRIT_GLOW =
+        "render_pipeline.module.ray_tracing.attribute.particle_crit_glow";
+    private static final String ATTR_PARTICLE_DEATH_SMOKE_GLOW =
+        "render_pipeline.module.ray_tracing.attribute.particle_death_smoke_glow";
+    private static final String ATTR_PARTICLE_CRIT_GLOW_STRENGTH =
+        "render_pipeline.module.ray_tracing.attribute.particle_crit_glow_strength";
+    private static final String ATTR_PARTICLE_DEATH_SMOKE_GLOW_STRENGTH =
+        "render_pipeline.module.ray_tracing.attribute.particle_death_smoke_glow_strength";
     private static final String ATTR_SEPARATE_ENTITY_TERRAIN_ACCEL_STRUCTURES =
         "render_pipeline.module.ray_tracing.attribute.separate_entity_terrain_accel_structures";
 
@@ -82,6 +90,10 @@ final class RayTracingTuning {
         GeometryPathMode geometryPathMode = getPathMode(renderLayer);
         if (geometryPathMode == GeometryPathMode.EXCLUDE) {
             return ChunkGeometryRoute.DROP;
+        }
+        if (geometryPathMode == GeometryPathMode.SPECIAL_PATH
+            && shouldForceBlasForTranslucentTerrain(renderLayer)) {
+            return ChunkGeometryRoute.BLAS;
         }
         if (geometryPathMode == GeometryPathMode.SPECIAL_PATH
             && !separatesEntityAndTerrainAccelerationStructures()) {
@@ -227,6 +239,34 @@ final class RayTracingTuning {
         return Math.max(1,
             Pipeline.getModuleAttributeIntValue(RAY_TRACING_MODULE,
                 ATTR_PARTICLE_UPDATE_INTERVAL_FRAMES, entityUpdateIntervalFrames()));
+    }
+
+    static boolean critParticlesGlowEnabled() {
+        return Pipeline.getModuleAttributeBooleanValue(RAY_TRACING_MODULE,
+            ATTR_PARTICLE_CRIT_GLOW, true);
+    }
+
+    static float critParticlesGlowStrength() {
+        if (!critParticlesGlowEnabled()) {
+            return 0.0f;
+        }
+        return Math.max(0.0f,
+            Pipeline.getModuleAttributeFloatValue(RAY_TRACING_MODULE,
+                ATTR_PARTICLE_CRIT_GLOW_STRENGTH, 0.55f));
+    }
+
+    static boolean deathSmokeParticlesGlowEnabled() {
+        return Pipeline.getModuleAttributeBooleanValue(RAY_TRACING_MODULE,
+            ATTR_PARTICLE_DEATH_SMOKE_GLOW, true);
+    }
+
+    static float deathSmokeParticlesGlowStrength() {
+        if (!deathSmokeParticlesGlowEnabled()) {
+            return 0.0f;
+        }
+        return Math.max(0.0f,
+            Pipeline.getModuleAttributeFloatValue(RAY_TRACING_MODULE,
+                ATTR_PARTICLE_DEATH_SMOKE_GLOW_STRENGTH, 0.32f));
     }
 
     static int getFarFieldStartDistanceChunks() {
@@ -396,6 +436,17 @@ final class RayTracingTuning {
     private static boolean isReflectiveSpecialLayer(RenderLayer renderLayer) {
         return isTranslucentLayer(renderLayer) || renderLayer.name.contains("water")
             || renderLayer.name.contains("ice");
+    }
+
+    private static boolean shouldForceBlasForTranslucentTerrain(RenderLayer renderLayer) {
+        String name = renderLayer.name;
+        if (name.contains("water_mask")
+            || name.contains("end_portal")
+            || name.contains("end_gateway")
+            || name.contains("cloud")) {
+            return false;
+        }
+        return isTranslucentLayer(renderLayer) || name.contains("ice");
     }
 
     private static GeometryPathMode getPathMode(RenderLayer renderLayer) {

@@ -58,6 +58,7 @@ public class ChunkProxy {
     private static final List<Future<?>> rebuildTasks = new ArrayList<>();
     private static final Map<Long, ChunkSpecialRenderData> specialChunkGeometry =
         new ConcurrentHashMap<>();
+    private static final Map<Integer, Long> builtChunkBuildOrigins = new ConcurrentHashMap<>();
     private static final Map<Long, ChunkTraversalData> chunkTraversalData =
         new ConcurrentHashMap<>();
     private static final Object specialChunkGeometryLock = new Object();
@@ -119,6 +120,7 @@ public class ChunkProxy {
             }
             specialChunkGeometry.clear();
         }
+        builtChunkBuildOrigins.clear();
         chunkTraversalData.clear();
     }
 
@@ -139,7 +141,9 @@ public class ChunkProxy {
             }
 
             if (!builtChunk.needsRebuild() || !builtChunk.shouldBuild()) {
-                processedChunks.add(rebuildEntry.getKey());
+                if (!builtChunk.needsRebuild()) {
+                    processedChunks.add(rebuildEntry.getKey());
+                }
                 continue;
             }
 
@@ -148,13 +152,18 @@ public class ChunkProxy {
                 / 16.0;
             boolean isImportant = chunkCenterPos.getSquaredDistance(cameraBlockPos) < 768.0
                 || builtChunk.needsImportantRebuild();
+            long chunkOriginKey = builtChunk.getOrigin().asLong();
 
             if (!isImportant) {
-                int updateInterval = RayTracingTuning.terrainUpdateIntervalFrames(distanceChunks);
-                long scheduleBucket = Math.floorMod(rebuildFrameCounter + builtChunk.index,
-                    updateInterval);
-                if (scheduleBucket != 0L) {
-                    continue;
+                if (chunkOriginKey == builtChunkBuildOrigins.getOrDefault(builtChunk.index,
+                    Long.MIN_VALUE)) {
+                    int updateInterval = RayTracingTuning.terrainUpdateIntervalFrames(
+                        distanceChunks);
+                    long scheduleBucket = Math.floorMod(rebuildFrameCounter + builtChunk.index,
+                        updateInterval);
+                    if (scheduleBucket != 0L) {
+                        continue;
+                    }
                 }
             }
 
@@ -204,6 +213,7 @@ public class ChunkProxy {
 
             if (chunkRendererRegion == null) {
                 clearSpecialChunkGeometry(builtChunk.index);
+                builtChunkBuildOrigins.remove(builtChunk.index);
                 chunkTraversalData.remove(builtChunk.index);
                 invalidateSingle(builtChunk.index);
                 builtChunk.data.set(ChunkBuilder.ChunkData.EMPTY);
@@ -312,6 +322,7 @@ public class ChunkProxy {
             }
         };
         builtChunk.data.set(chunkData);
+        builtChunkBuildOrigins.put(builtChunk.index, builtChunk.getOrigin().asLong());
         builtChunkNum++;
 
         if (blasBuffers.isEmpty()) {

@@ -17,7 +17,8 @@ public class SingleAtlasSourceMixins {
 
     @Redirect(method = "load(Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/client/texture/atlas/AtlasSource$SpriteRegions;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/texture/atlas/AtlasSource$SpriteRegions;add(Lnet/minecraft/util/Identifier;Lnet/minecraft/resource/Resource;)V"))
     public void cancelPBRLoad(SpriteRegions regions, Identifier id, Resource resource) {
-        if (id.getPath().endsWith("_s") || id.getPath().endsWith("_n")) {
+        if (id.getPath().endsWith("_s") || id.getPath().endsWith("_n")
+            || id.getPath().endsWith("_f")) {
             return;
         }
         regions.add(id, resource);

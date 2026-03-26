@@ -16,7 +16,8 @@ public class UnstitchAtlasSourceMixins {
     @Redirect(method = "load(Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/client/texture/atlas/AtlasSource$SpriteRegions;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/texture/atlas/AtlasSource$SpriteRegions;add(Lnet/minecraft/util/Identifier;Lnet/minecraft/client/texture/atlas/AtlasSource$SpriteRegion;)V"))
     public void cancelPBRLoad(SpriteRegions instance, Identifier identifier,
         SpriteRegion spriteRegion) {
-        if (identifier.getPath().endsWith("_s") || identifier.getPath().endsWith("_n")) {
+        if (identifier.getPath().endsWith("_s") || identifier.getPath().endsWith("_n")
+            || identifier.getPath().endsWith("_f")) {
             return;
         }
         instance.add(identifier, spriteRegion);
