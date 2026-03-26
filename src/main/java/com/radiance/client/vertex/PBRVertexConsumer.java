@@ -18,6 +18,7 @@ import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_NORM;
 import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_OVERLAY;
 import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_TEXTURE;
 
+import com.radiance.client.texture.TextureTracker;
 import java.nio.ByteOrder;
 import java.util.stream.Collectors;
 import net.minecraft.client.MinecraftClient;
@@ -30,7 +31,6 @@ import net.minecraft.client.render.VertexFormatElement;
 import net.minecraft.client.texture.MissingSprite;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Direction;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3f;
@@ -65,6 +65,7 @@ public class PBRVertexConsumer implements VertexConsumer {
     private float baseX = 0;
     private float baseY = 0;
     private float baseZ = 0;
+    private float pendingEmission = 0.0f;
 
     public PBRVertexConsumer(BufferAllocator allocator, RenderLayer renderLayer) {
         this(allocator, VertexFormat.DrawMode.QUADS, PBRVertexFormats.PBR_TRIANGLE, renderLayer);
@@ -90,15 +91,9 @@ public class PBRVertexConsumer implements VertexConsumer {
         }
 
         if (renderLayer instanceof RenderLayer.MultiPhase) {
-            Identifier
-                identifier =
-                ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
-                    .orElse(MissingSprite.getMissingSpriteId());
-            textureID =
-                MinecraftClient.getInstance()
-                    .getTextureManager()
-                    .getTexture(identifier)
-                    .getGlId();
+            textureID = TextureTracker.getRenderLayerTextureGlId(renderLayer,
+                MinecraftClient.getInstance().getTextureManager(),
+                MissingSprite.getMissingSpriteId());
         }
         this.alphaMode = getAlphaMode(renderLayer);
     }
@@ -316,6 +311,10 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(p + 8L, z);
         }
 
+        if (pendingEmission > 0.0f) {
+            albedoEmission(pendingEmission);
+        }
+
         return this;
     }
 
@@ -334,6 +333,10 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(p, x);
             MemoryUtil.memPutFloat(p + 4L, y);
             MemoryUtil.memPutFloat(p + 8L, z);
+        }
+
+        if (pendingEmission > 0.0f) {
+            albedoEmission(pendingEmission);
         }
 
         return this;
@@ -425,6 +428,10 @@ public class PBRVertexConsumer implements VertexConsumer {
         return this;
     }
 
+    public void setPendingEmission(float emission) {
+        this.pendingEmission = Math.max(0.0f, emission);
+    }
+
     public static class GLint implements VertexConsumer {
 
         private final PBRVertexConsumer delegate;
@@ -433,15 +440,9 @@ public class PBRVertexConsumer implements VertexConsumer {
         public GLint(PBRVertexConsumer delegate, RenderLayer glintRenderLayer) {
             this.delegate = delegate;
             if (glintRenderLayer instanceof RenderLayer.MultiPhase) {
-                Identifier
-                    identifier =
-                    ((RenderLayer.MultiPhase) glintRenderLayer).phases.texture.getId()
-                        .orElse(MissingSprite.getMissingSpriteId());
-                glintTextureID =
-                    MinecraftClient.getInstance()
-                        .getTextureManager()
-                        .getTexture(identifier)
-                        .getGlId();
+                glintTextureID = TextureTracker.getRenderLayerTextureGlId(glintRenderLayer,
+                    MinecraftClient.getInstance().getTextureManager(),
+                    MissingSprite.getMissingSpriteId());
             }
         }
 
@@ -510,15 +511,9 @@ public class PBRVertexConsumer implements VertexConsumer {
             MatrixStack.Entry matrix, float textureScale) {
             this.delegate = delegate;
             if (glintRenderLayer instanceof RenderLayer.MultiPhase) {
-                Identifier
-                    identifier =
-                    ((RenderLayer.MultiPhase) glintRenderLayer).phases.texture.getId()
-                        .orElse(MissingSprite.getMissingSpriteId());
-                glintTextureID =
-                    MinecraftClient.getInstance()
-                        .getTextureManager()
-                        .getTexture(identifier)
-                        .getGlId();
+                glintTextureID = TextureTracker.getRenderLayerTextureGlId(glintRenderLayer,
+                    MinecraftClient.getInstance().getTextureManager(),
+                    MissingSprite.getMissingSpriteId());
             }
 
             this.inverseTextureMatrix = new Matrix4f(matrix.getPositionMatrix()).invert();
