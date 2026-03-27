@@ -137,10 +137,18 @@ public class MinecraftClientMixins {
 
     @Redirect(method = "render(Z)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gl/Framebuffer;endWrite()V"))
     public void cancelFramebufferEndWrite(Framebuffer instance, boolean setViewport) {
+        if (RendererProxy.isShuttingDown()) {
+            return;
+        }
         ChunkProxy.waitImportantChunkRebuild();
         synchronized (TextureProxy.class) {
+            if (RendererProxy.isShuttingDown()) {
+                return;
+            }
             RendererProxy.submitCommandAndPresent();
-            RendererProxy.acquireContext();
+            if (!RendererProxy.isShuttingDown()) {
+                RendererProxy.acquireContext();
+            }
         }
     }
 
@@ -175,6 +183,11 @@ public class MinecraftClientMixins {
     //endregion
 
     // region <scheduleStop>
+    @Inject(method = "scheduleStop()V", at = @At(value = "HEAD"))
+    public void beginShutdown(CallbackInfo ci) {
+        RendererProxy.requestShutdown();
+    }
+
     @Inject(method = "scheduleStop()V", at = @At(value = "TAIL"))
     public void close(CallbackInfo ci) {
         RendererProxy.close();

@@ -11,14 +11,18 @@ import net.minecraft.client.util.Window;
 public class RendererProxy {
 
     private static int pipelineType = -1;
+    private static volatile boolean shuttingDown = false;
 
     public static native void initFolderPath(String folderPath);
 
     public static native void initRenderer(String[] glfwLibCandidates, long windowHandle);
 
+    public static native void beginShutdownNative();
+
     public static void initRenderer(Window window) {
         String mapped = System.mapLibraryName("glfw");
         String[] candidates = {mapped, "libglfw.so.3", "libglfw.3.dylib", "glfw3.dll"};
+        shuttingDown = false;
         RendererProxy.initRenderer(candidates, window.getHandle());
         RenderSystem.apiDescription = "Vulkan 1.4";
     }
@@ -32,16 +36,46 @@ public class RendererProxy {
     public static native void present();
 
     public static void submitCommandAndPresent() {
+        if (shuttingDown) {
+            return;
+        }
         submitCommand();
+        if (shuttingDown) {
+            return;
+        }
         present();
+    }
+
+    public static void requestShutdown() {
+        shuttingDown = true;
+        beginShutdownNative();
+    }
+
+    public static boolean isShuttingDown() {
+        return shuttingDown;
     }
 
     public static void bindOverlayPipeline(int type) {
         pipelineType = type;
     }
 
+    public static boolean hasOverlayPipeline() {
+        return pipelineType >= 0;
+    }
+
+    public static int getOverlayPipelineType() {
+        return pipelineType;
+    }
+
     public static native void drawOverlay(int vertexId, int indexId, int pipelineType,
         int indexCount, int indexType);
+
+    public static void drawOverlay(BufferProxy.VertexIndexBufferHandle handle, int indexCount,
+        int pipelineType,
+        VertexFormat.IndexType indexType) {
+        drawOverlay(handle.vertexId, handle.indexId, pipelineType, indexCount,
+            Constants.IndexTypes.getValue(indexType));
+    }
 
     public static void drawOverlay(BufferProxy.VertexIndexBufferHandle handle, int indexCount,
         VertexFormat.IndexType indexType) {
