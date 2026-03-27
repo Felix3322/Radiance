@@ -18,19 +18,18 @@ import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_NORM;
 import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_OVERLAY;
 import static com.radiance.client.vertex.PBRVertexFormatElements.PBR_USE_TEXTURE;
 
-import com.radiance.client.texture.TextureTracker;
 import java.nio.ByteOrder;
 import java.util.stream.Collectors;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BuiltBuffer;
 import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderPhase;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormatElement;
 import net.minecraft.client.texture.MissingSprite;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Direction;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3f;
@@ -41,10 +40,6 @@ import org.lwjgl.system.MemoryUtil;
 public class PBRVertexConsumer implements VertexConsumer {
 
     private static final boolean LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-    private static final int ALPHA_MODE_OPAQUE = 0;
-    private static final int ALPHA_MODE_CUTOUT = 1;
-    private static final int ALPHA_MODE_TRANSPARENT = 2;
-    public static final int MATERIAL_HINT_FORCE_NO_PBR = 1 << 0;
 
     private final BufferAllocator allocator;
     private final VertexFormat format;
@@ -60,8 +55,6 @@ public class PBRVertexConsumer implements VertexConsumer {
     private int currentMask = 0;
     private boolean building = true;
     private int textureID;
-    private final int alphaMode;
-    private int materialHints = 0;
     private float baseX = 0;
     private float baseY = 0;
     private float baseZ = 0;
@@ -91,11 +84,16 @@ public class PBRVertexConsumer implements VertexConsumer {
         }
 
         if (renderLayer instanceof RenderLayer.MultiPhase) {
-            textureID = TextureTracker.getRenderLayerTextureGlId(renderLayer,
-                MinecraftClient.getInstance().getTextureManager(),
-                MissingSprite.getMissingSpriteId());
+            Identifier
+                identifier =
+                ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
+                    .orElse(MissingSprite.getMissingSpriteId());
+            textureID =
+                MinecraftClient.getInstance()
+                    .getTextureManager()
+                    .getTexture(identifier)
+                    .getGlId();
         }
-        this.alphaMode = getAlphaMode(renderLayer);
     }
 
     private static void putInt(long ptr, int v) {
@@ -107,41 +105,12 @@ public class PBRVertexConsumer implements VertexConsumer {
         }
     }
 
-    private static int getAlphaMode(RenderLayer renderLayer) {
-        if (!(renderLayer instanceof RenderLayer.MultiPhase multiPhase)) {
-            return ALPHA_MODE_OPAQUE;
-        }
-
-        if (multiPhase.name.contains("solid")) {
-            return ALPHA_MODE_OPAQUE;
-        }
-
-        if (multiPhase.name.contains("particle") || multiPhase.name.contains("weather")) {
-            return ALPHA_MODE_TRANSPARENT;
-        }
-
-        if (multiPhase.name.contains("cutout")) {
-            return ALPHA_MODE_CUTOUT;
-        }
-
-        if (RenderPhase.NO_TRANSPARENCY.equals(multiPhase.phases.transparency)) {
-            return ALPHA_MODE_CUTOUT;
-        }
-
-        return ALPHA_MODE_TRANSPARENT;
-    }
-
     public VertexFormat getFormat() {
         return this.format;
     }
 
     public int getVertexCount() {
         return this.vertexCount;
-    }
-
-    public PBRVertexConsumer materialHints(int materialHints) {
-        this.materialHints = Math.max(materialHints, 0);
-        return this;
     }
 
     public void setBase(float x, float y, float z) {
@@ -212,8 +181,6 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(ptr + offBase, baseX);
             MemoryUtil.memPutFloat(ptr + offBase + 4L, baseY);
             MemoryUtil.memPutFloat(ptr + offBase + 8L, baseZ);
-            // Reuse the trailing padding word after postBase for alpha mode and material hints.
-            putInt(ptr + offBase + 12L, this.alphaMode | (this.materialHints << 8));
         }
 
         return ptr;
@@ -240,8 +207,6 @@ public class PBRVertexConsumer implements VertexConsumer {
             MemoryUtil.memPutFloat(ptr + offBase, baseX);
             MemoryUtil.memPutFloat(ptr + offBase + 4L, baseY);
             MemoryUtil.memPutFloat(ptr + offBase + 8L, baseZ);
-            // Reuse the trailing padding word after postBase for alpha mode and material hints.
-            putInt(ptr + offBase + 12L, this.alphaMode | (this.materialHints << 8));
         }
 
         if (glintTextureID != 0) {
@@ -432,6 +397,10 @@ public class PBRVertexConsumer implements VertexConsumer {
         this.pendingEmission = Math.max(0.0f, emission);
     }
 
+    public int getTextureID() {
+        return this.textureID;
+    }
+
     public static class GLint implements VertexConsumer {
 
         private final PBRVertexConsumer delegate;
@@ -440,9 +409,15 @@ public class PBRVertexConsumer implements VertexConsumer {
         public GLint(PBRVertexConsumer delegate, RenderLayer glintRenderLayer) {
             this.delegate = delegate;
             if (glintRenderLayer instanceof RenderLayer.MultiPhase) {
-                glintTextureID = TextureTracker.getRenderLayerTextureGlId(glintRenderLayer,
-                    MinecraftClient.getInstance().getTextureManager(),
-                    MissingSprite.getMissingSpriteId());
+                Identifier
+                    identifier =
+                    ((RenderLayer.MultiPhase) glintRenderLayer).phases.texture.getId()
+                        .orElse(MissingSprite.getMissingSpriteId());
+                glintTextureID =
+                    MinecraftClient.getInstance()
+                        .getTextureManager()
+                        .getTexture(identifier)
+                        .getGlId();
             }
         }
 
@@ -511,9 +486,15 @@ public class PBRVertexConsumer implements VertexConsumer {
             MatrixStack.Entry matrix, float textureScale) {
             this.delegate = delegate;
             if (glintRenderLayer instanceof RenderLayer.MultiPhase) {
-                glintTextureID = TextureTracker.getRenderLayerTextureGlId(glintRenderLayer,
-                    MinecraftClient.getInstance().getTextureManager(),
-                    MissingSprite.getMissingSpriteId());
+                Identifier
+                    identifier =
+                    ((RenderLayer.MultiPhase) glintRenderLayer).phases.texture.getId()
+                        .orElse(MissingSprite.getMissingSpriteId());
+                glintTextureID =
+                    MinecraftClient.getInstance()
+                        .getTextureManager()
+                        .getTexture(identifier)
+                        .getGlId();
             }
 
             this.inverseTextureMatrix = new Matrix4f(matrix.getPositionMatrix()).invert();

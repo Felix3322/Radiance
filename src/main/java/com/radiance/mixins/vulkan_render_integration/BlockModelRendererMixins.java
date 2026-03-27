@@ -1,6 +1,12 @@
 package com.radiance.mixins.vulkan_render_integration;
 
+import com.radiance.client.option.Options;
+import com.radiance.client.util.ChunkLightCollector;
+import com.radiance.client.util.EmissiveBlock;
+import com.radiance.client.util.LightSourceDef;
+import com.radiance.client.util.LightSourceRegistry;
 import com.radiance.client.vertex.PBRVertexConsumer;
+
 import com.radiance.mixin_related.extensions.vulkan_render_integration.IBlockColorsExt;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.color.block.BlockColors;
@@ -20,14 +26,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(BlockModelRenderer.class)
 public class BlockModelRendererMixins {
 
-    private static final ThreadLocal<float[]> BRIGHTNESS_BUFFER = ThreadLocal.withInitial(
-        () -> new float[4]);
-    private static final ThreadLocal<int[]> LIGHT_BUFFER = ThreadLocal.withInitial(
-        () -> new int[4]);
-
     @Final
     @Shadow
     private BlockColors colors;
+
+    private static final ThreadLocal<float[]> BRIGHTNESS_BUFFER = ThreadLocal.withInitial(() -> new float[4]);
+    private static final ThreadLocal<int[]> LIGHT_BUFFER = ThreadLocal.withInitial(() -> new int[4]);
 
     @Inject(method =
         "renderQuad(Lnet/minecraft/world/BlockRenderView;Lnet/minecraft/block/BlockState;Lnet/minecraft/util/math/BlockPos;"
@@ -63,19 +67,56 @@ public class BlockModelRendererMixins {
             g = (i >> 8 & 0xFF) / 255.0F;
             h = (i & 0xFF) / 255.0F;
 
-            emission = ((IBlockColorsExt) this.colors).radiance$getEmission(state, world, pos,
+            emission = ((IBlockColorsExt) this.colors).neoVoxelRT$getEmission(state, world, pos,
                 quad.getTintIndex());
         } else {
             f = 1.0F;
             g = 1.0F;
             h = 1.0F;
+
             emission = 0.0F;
+        }
+
+        if (EmissiveBlock.isEmissive(state.getBlock())) {
+            emission = Math.max(emission, EmissiveBlock.getEmission(state.getBlock()));
         }
 
         PBRVertexConsumer pbrVertexConsumer = null;
         if (vertexConsumer instanceof PBRVertexConsumer pbr) {
             pbrVertexConsumer = pbr;
-            pbrVertexConsumer.setPendingEmission(emission);
+
+            // --- Mutual exclusion: resolve effective light mode ---
+            LightSourceDef lightDef = LightSourceRegistry.getLightSource(state);
+            int effectiveMode;
+
+            if (lightDef != null && lightDef.typeId >= 0 && lightDef.typeId < Options.AREA_LIGHT_TYPE_COUNT) {
+                int configuredMode = Options.blockLightMode[lightDef.typeId];
+                if (configuredMode == Options.LIGHT_MODE_FORCE_AREA) {
+                    effectiveMode = Options.LIGHT_MODE_FORCE_AREA;
+                } else if (configuredMode == Options.LIGHT_MODE_FORCE_EMISSIVE) {
+                    effectiveMode = Options.LIGHT_MODE_FORCE_EMISSIVE;
+                } else {
+                    // Auto: always prefer area light for registered blocks (ReSTIR handles lighting)
+                    effectiveMode = Options.LIGHT_MODE_FORCE_AREA;
+                }
+            } else {
+                // No area light available — emissive only
+                effectiveMode = Options.LIGHT_MODE_FORCE_EMISSIVE;
+            }
+
+            // Apply based on effective mode
+            if (effectiveMode == Options.LIGHT_MODE_FORCE_AREA && lightDef != null) {
+                // AREA LIGHT MODE: negative emission = signal to shader to suppress bounce
+                // abs(value) used for primary-hit self-glow and bloom
+                pbrVertexConsumer.setPendingEmission(-Math.max(emission, 0.001f));
+                if (ChunkLightCollector.isActive()) {
+                    ChunkLightCollector.addLight(pos, lightDef);
+                }
+            } else {
+                // EMISSIVE MODE: positive emission, no area light collection
+                pbrVertexConsumer.setPendingEmission(emission);
+                // Area light NOT added to collector — emissive path handles illumination
+            }
         }
 
         float[] brightness = BRIGHTNESS_BUFFER.get();

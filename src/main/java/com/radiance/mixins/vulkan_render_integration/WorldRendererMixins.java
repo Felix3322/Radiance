@@ -3,6 +3,8 @@ package com.radiance.mixins.vulkan_render_integration;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.radiance.client.UnsafeManager;
+import com.radiance.client.option.Options;
+import com.radiance.client.cloud.CloudTileManager;
 import com.radiance.client.proxy.vulkan.BufferProxy;
 import com.radiance.client.proxy.world.ChunkProxy;
 import com.radiance.client.proxy.world.EntityProxy;
@@ -44,6 +46,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.BlockBreakingInfo;
+import net.minecraft.util.Pair;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.ColorHelper;
@@ -225,7 +228,7 @@ public abstract class WorldRendererMixins {
             this.renderedEntities);
 
         Matrix4f viewMatrix = new Matrix4f(
-            ((IGameRendererExt) gameRenderer).radiance$getRotationMatrix());
+            ((IGameRendererExt) gameRenderer).neoVoxelRT$getRotationMatrix());
         Matrix4f effectedViewMatrix = new Matrix4f(effectedRotationMatrix);
 
         // fog
@@ -240,7 +243,7 @@ public abstract class WorldRendererMixins {
 
         TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
         OverlayTexture overlayTexture = gameRenderer.getOverlayTexture();
-        int overlayTextureID = ((IOverlayTextureExt) overlayTexture).radiance$getTexture()
+        int overlayTextureID = ((IOverlayTextureExt) overlayTexture).neoVoxelRT$getTexture()
             .getGlId();
         int endSkyTextureID = textureManager.getTexture(EndPortalBlockEntityRenderer.SKY_TEXTURE)
             .getGlId();
@@ -251,29 +254,91 @@ public abstract class WorldRendererMixins {
 
         // Sky
         float tickDelta = tickCounter.getTickDelta(false);
+        int envDim = Options.getEnvironmentDimensionIndex(this.world);
+        float skyBrightness = Options.getSkyBrightness(envDim);
+        float rainBlendStrength = Options.getRainBlendStrength(envDim);
+        float sunSizeMultiplier = Options.getSunSizeMultiplier(envDim);
+        float moonSizeMultiplier = Options.getMoonSizeMultiplier(envDim);
+        float sunIntensityMultiplier = Options.getSunIntensityMultiplier(envDim);
+        float moonIntensityMultiplier = Options.getMoonIntensityMultiplier(envDim);
+        float waterTintR = Options.getWaterTintR(envDim);
+        float waterTintG = Options.getWaterTintG(envDim);
+        float waterTintB = Options.getWaterTintB(envDim);
+        float waterFogStrength = Options.getWaterFogStrength(envDim);
         float skyAngle = this.world.getSkyAngle(tickDelta);
 
         int baseColor = this.world.getSkyColor(this.client.gameRenderer.getCamera().getPos(),
             tickDelta);
-        float baseColorR = ColorHelper.getRedFloat(baseColor);
-        float baseColorG = ColorHelper.getGreenFloat(baseColor);
-        float baseColorB = ColorHelper.getBlueFloat(baseColor);
+        float baseColorR = ColorHelper.getRedFloat(baseColor) * skyBrightness;
+        float baseColorG = ColorHelper.getGreenFloat(baseColor) * skyBrightness;
+        float baseColorB = ColorHelper.getBlueFloat(baseColor) * skyBrightness;
 
         DimensionEffects dimensionEffects = this.world.getDimensionEffects();
         int horizontalColor = dimensionEffects.getSkyColor(skyAngle);
-        float horizontalColorR = ColorHelper.getRedFloat(horizontalColor);
-        float horizontalColorG = ColorHelper.getGreenFloat(horizontalColor);
-        float horizontalColorB = ColorHelper.getBlueFloat(horizontalColor);
+        float horizontalColorR = ColorHelper.getRedFloat(horizontalColor) * skyBrightness;
+        float horizontalColorG = ColorHelper.getGreenFloat(horizontalColor) * skyBrightness;
+        float horizontalColorB = ColorHelper.getBlueFloat(horizontalColor) * skyBrightness;
         float horizontalColorA = ColorHelper.getAlphaFloat(horizontalColor);
 
-        MatrixStack matrixStack = new MatrixStack();
-        matrixStack.push();
-        matrixStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90.0F));
-        matrixStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(skyAngle * 360.0F));
-        Matrix4f rotationMatrix = matrixStack.peek().getPositionMatrix();
-        Vector3f sunDirection = rotationMatrix.transformPosition(0, 1, 0, new Vector3f())
-            .normalize();
-        matrixStack.pop();
+        // Compute sun/moon direction from the actual day-time tick value.
+        // This keeps lighting aligned with `/time set ...` and avoids phase errors from getSkyAngle().
+        long dayTimeTicks = this.world.getTimeOfDay() % 24000L;
+        float dayFrac = (dayTimeTicks + tickDelta) / 24000.0F;
+        float skyAngleForSun = dayFrac - 0.25F;
+
+        Vector3f sunDirection;
+        Vector3f moonDirection;
+
+        if (Options.sunPathMode == 1) {
+            // Physical mode: apply inclination (axial tilt) and azimuth offset
+            float inclDeg = (float) Options.sunInclinationDeg;
+            float azOffDeg = (float) Options.sunAzimuthOffsetDeg;
+
+            MatrixStack ms = new MatrixStack();
+            ms.push();
+            // 1. Base Y rotation (vanilla baseline) + azimuth offset
+            ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90.0F + azOffDeg));
+            // 2. Tilt the orbital plane by inclination (Z-axis rotation tilts the orbit)
+            ms.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(inclDeg));
+            // 3. Rotate sun around the tilted orbital plane
+            ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees(skyAngleForSun * 360.0F));
+            Matrix4f rot = ms.peek().getPositionMatrix();
+            sunDirection = rot.transformPosition(0, 1, 0, new Vector3f()).normalize();
+            ms.pop();
+
+            // Moon direction
+            float moonInclDeg, moonAzOffDeg;
+            if (Options.moonFollowSun) {
+                moonInclDeg = inclDeg;
+                moonAzOffDeg = azOffDeg;
+            } else {
+                moonInclDeg = (float) Options.moonInclinationDeg;
+                moonAzOffDeg = (float) Options.moonAzimuthOffsetDeg;
+            }
+            MatrixStack moonMs = new MatrixStack();
+            moonMs.push();
+            moonMs.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90.0F + moonAzOffDeg));
+            moonMs.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(moonInclDeg));
+            // Moon is 180deg opposite the sun in its orbit
+            moonMs.multiply(RotationAxis.POSITIVE_X.rotationDegrees((skyAngleForSun + 0.5F) * 360.0F));
+            Matrix4f moonRot = moonMs.peek().getPositionMatrix();
+            moonDirection = moonRot.transformPosition(0, 1, 0, new Vector3f()).normalize();
+            moonMs.pop();
+        } else {
+            // Legacy mode: vanilla-style overhead arc (current behavior)
+            MatrixStack ms = new MatrixStack();
+            ms.push();
+            ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90.0F));
+            ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees(skyAngleForSun * 360.0F));
+            Matrix4f rot = ms.peek().getPositionMatrix();
+            // Shaders treat sunDirection.y as elevation above the horizon.
+            // In vanilla sky rendering the sun quad starts at +Y before being rotated.
+            sunDirection = rot.transformPosition(0, 1, 0, new Vector3f()).normalize();
+            ms.pop();
+
+            // Moon opposite sun in legacy mode
+            moonDirection = new Vector3f(-sunDirection.x, -sunDirection.y, -sunDirection.z);
+        }
 
         int skyType = dimensionEffects.getSkyType().ordinal();
 
@@ -293,33 +358,57 @@ public abstract class WorldRendererMixins {
 
         int moonTextureID = textureManager.getTexture(SkyRendering.MOON_PHASES_TEXTURE).getGlId();
 
-        BufferProxy.updateSkyUniform(baseColorR, baseColorG, baseColorB, horizontalColorR,
-            horizontalColorG, horizontalColorB, horizontalColorA, sunDirection, skyType,
-            sunRisingOrSetting, skyDark, hasBlindnessOrDarkness, submersionType, moonPhase,
-            rainGradient, sunTextureID, moonTextureID);
+        CloudRenderMode cloudRenderMode = this.client.options.getCloudRenderModeValue();
+        float cloudBaseHeight = Float.NaN;
+        float cloudThickness = Options.getCloudThicknessBlocks(envDim);
+        float cloudDensityScale = 0.0F;
+        float cloudAlbedoScale = Options.getCloudBrightness(envDim);
+
+        float cloudPuffiness = Options.getCloudPuffiness(envDim);
+        float cloudDetailScale = Options.getCloudDetailScale(envDim);
+        // Fast = analytic flat slab (detailStrength=0); Fancy = 3D FBM stepped volumetric.
+        float cloudDetailStrength = (cloudRenderMode == CloudRenderMode.FANCY)
+            ? Options.getCloudDetailStrength(envDim)
+            : 0.0f;
+        float cloudAnisotropy = Options.getCloudAnisotropy(envDim);
+        float cloudShadowStrength = Options.getCloudShadowStrength(envDim);
+        float cloudDensity = Options.getCloudDensity(envDim);
+        float cloudNoiseAffectsShadows = Options.getCloudNoiseAffectsShadows(envDim) ? 1.0F : 0.0F;
+
+        float cloudAmbientStrength = 0.15F;
+        float cloudSunOcclusionStrength = 1.0F;
+
+        float vanillaCloudsHeight = this.world.getDimensionEffects().getCloudsHeight();
+        if (cloudRenderMode != CloudRenderMode.OFF && !Float.isNaN(vanillaCloudsHeight)) {
+            cloudBaseHeight = vanillaCloudsHeight + 0.33F + Options.getCloudHeightOffset(envDim);
+            float cloudAlpha = Options.getCloudAlpha(envDim);
+            // Extinction coefficient in "per block" units. Tuned so 100% alpha produces visible sun occlusion and ground shadows.
+            cloudDensityScale = 0.35F * cloudAlpha * cloudDensity;
+        }
 
         BufferProxy.updateMapping();
 
         ILightMapManagerExt lightMapManagerExt = (ILightMapManagerExt) (gameRenderer.getLightmapTextureManager());
-        BufferProxy.updateLightMapUniform(lightMapManagerExt.radiance$getAmbientLightFactor(),
-            lightMapManagerExt.radiance$getSkyFactor(),
-            lightMapManagerExt.radiance$getBlockFactor(),
-            lightMapManagerExt.radiance$isUseBrightLightmap(),
-            lightMapManagerExt.radiance$getSkyLightColor(),
-            lightMapManagerExt.radiance$getNightVisionFactor(),
-            lightMapManagerExt.radiance$getDarknessScale(),
-            lightMapManagerExt.radiance$getDarkenWorldFactor(),
-            lightMapManagerExt.radiance$getBrightnessFactor());
+        BufferProxy.updateLightMapUniform(lightMapManagerExt.neoVoxelRT$getAmbientLightFactor(),
+            lightMapManagerExt.neoVoxelRT$getSkyFactor(),
+            lightMapManagerExt.neoVoxelRT$getBlockFactor(),
+            lightMapManagerExt.neoVoxelRT$isUseBrightLightmap(),
+            lightMapManagerExt.neoVoxelRT$getSkyLightColor(),
+            lightMapManagerExt.neoVoxelRT$getNightVisionFactor(),
+            lightMapManagerExt.neoVoxelRT$getDarknessScale(),
+            lightMapManagerExt.neoVoxelRT$getDarkenWorldFactor(),
+            lightMapManagerExt.neoVoxelRT$getBrightnessFactor());
 
         // Entities
         EntityProxy.queueEntitiesBuild(camera, renderedEntities, this.entityRenderDispatcher,
             tickCounter, canDrawEntityOutlines());
 
-        EntityProxy.BlockEntityQueueResult crumblingRenderData = EntityProxy.queueBlockEntitiesRebuild(
-            this.builtChunks, this.noCullingBlockEntities, blockBreakingProgressions,
+        Pair<List<StorageVertexConsumerProvider>, EntityProxy.EntityRenderDataList> crumblingRenderData = EntityProxy.queueBlockEntitiesRebuild(
+            camera, chunks, this.noCullingBlockEntities, blockBreakingProgressions,
             blockEntityRenderDispatcher, tickDelta);
         EntityProxy.queueCrumblingRebuild(camera, blockBreakingProgressions,
-            this.client.getBlockRenderManager(), this.world, crumblingRenderData);
+            this.client.getBlockRenderManager(), this.world, crumblingRenderData.getLeft(),
+            crumblingRenderData.getRight());
 
         EntityProxy.queueParticleRebuild(camera, tickDelta, frustum);
 
@@ -331,21 +420,46 @@ public abstract class WorldRendererMixins {
             camera, this.ticks, tickDelta);
 
         // clouds
-        CloudRenderMode cloudRenderMode = this.client.options.getCloudRenderModeValue();
         if (cloudRenderMode != CloudRenderMode.OFF) {
-            float k = this.world.getDimensionEffects().getCloudsHeight();
-            if (!Float.isNaN(k)) {
+            if (!Float.isNaN(vanillaCloudsHeight)) {
                 float ticks = (float) this.ticks + f;
                 int color = this.world.getCloudsColor(f);
-                float cloudHeight = k + 0.33F;
+                float cloudHeight = vanillaCloudsHeight + 0.33F + Options.getCloudHeightOffset(envDim);
                 this.cloudRenderer.renderClouds(color, cloudRenderMode, cloudHeight, null, null,
                     camera.getPos(), ticks);
             }
         }
 
+        int cloudTileTextureID = -1;
+        int cloudCenterX = 0;
+        int cloudCenterZ = 0;
+        float cloudOffsetX = 0.0F;
+        float cloudOffsetZ = 0.0F;
+        float cloudTicks = 0.0F;
+        if (CloudTileManager.isValid()) {
+            cloudTileTextureID = CloudTileManager.getCloudMaskTextureId();
+            cloudCenterX = CloudTileManager.getCenterCellX();
+            cloudCenterZ = CloudTileManager.getCenterCellZ();
+            cloudOffsetX = CloudTileManager.getOffsetX();
+            cloudOffsetZ = CloudTileManager.getOffsetZ();
+            cloudTicks = CloudTileManager.getTicks();
+        }
+
+        BufferProxy.updateSkyUniform(baseColorR, baseColorG, baseColorB, horizontalColorR,
+            horizontalColorG, horizontalColorB, horizontalColorA, sunDirection, moonDirection,
+            skyType, sunRisingOrSetting, skyDark, hasBlindnessOrDarkness, submersionType,
+            moonPhase, rainGradient, sunTextureID, moonTextureID, sunSizeMultiplier,
+            moonSizeMultiplier, sunIntensityMultiplier, moonIntensityMultiplier,
+            waterTintR, waterTintG, waterTintB, waterFogStrength, rainBlendStrength,
+            skyBrightness, cloudBaseHeight, cloudThickness, cloudDensityScale, cloudAlbedoScale,
+            cloudTileTextureID, cloudCenterX, cloudCenterZ,
+            cloudOffsetX, cloudOffsetZ, cloudTicks,
+            cloudPuffiness, cloudDetailScale, cloudDetailStrength, cloudAnisotropy,
+            cloudShadowStrength, cloudAmbientStrength, cloudSunOcclusionStrength,
+            cloudNoiseAffectsShadows);
+
         // Chunks
-        ChunkProxy.rebuild(camera, this.builtChunks);
-        ChunkProxy.queueSpecialGeometry(this.builtChunks, camera);
+        ChunkProxy.rebuild(camera);
 
         this.renderedEntities.clear();
 

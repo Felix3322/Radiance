@@ -22,46 +22,72 @@ public enum AuxiliaryTextures {
         String path = identifier.getPath();
         String[] pathComponents = path.split("/");
         String[] fileNameComponents = pathComponents[pathComponents.length - 1].split("\\.");
-        String specularFileName = String.join("",
+        String suffixedFileName = String.join("",
             new String[]{fileNameComponents[0], "_s.", fileNameComponents[1]});
 
-        pathComponents[pathComponents.length - 1] = specularFileName;
-        String specularPath = String.join("/", pathComponents);
-        Identifier specularIdentifier = Identifier.of(namespace, specularPath);
-        return List.of(specularIdentifier);
-    }, INativeImageExt::radiance$getSpecularNativeImage,
-        INativeImageExt::radiance$setSpecularNativeImage,
-        TextureTracker.GLID2SpecularGLID),
-    NORMAL("normal", "_n", (identifier, source) -> {
+        // Primary: same-directory LabPBR layout (e.g. textures/block/stone_s.png)
+        String[] sameDir = pathComponents.clone();
+        sameDir[sameDir.length - 1] = suffixedFileName;
+        String sameDirPath = String.join("/", sameDir);
+        Identifier sameDirId = Identifier.of(namespace, sameDirPath);
+
+        // Fallback: separate subfolder layout (e.g. textures/specular/block/stone_s.png)
+        String subfolderPath = sameDirPath.replace("textures/", "textures/specular/");
+        Identifier subfolderId = Identifier.of(namespace, subfolderPath);
+
+        return List.of(sameDirId, subfolderId);
+    }, INativeImageExt::neoVoxelRT$getSpecularNativeImage,
+        INativeImageExt::neoVoxelRT$setSpecularNativeImage,
+        INativeImageExt::neoVoxelRT$getSpecularUploadedLevelsMask,
+        INativeImageExt::neoVoxelRT$setSpecularUploadedLevelsMask,
+        TextureTracker.GLID2SpecularGLID), NORMAL("normal", "_n", (identifier, source) -> {
         String namespace = identifier.getNamespace();
         String path = identifier.getPath();
         String[] pathComponents = path.split("/");
         String[] fileNameComponents = pathComponents[pathComponents.length - 1].split("\\.");
-        String normalFileName = String.join("",
+        String suffixedFileName = String.join("",
             new String[]{fileNameComponents[0], "_n.", fileNameComponents[1]});
 
-        pathComponents[pathComponents.length - 1] = normalFileName;
-        String normalPath = String.join("/", pathComponents);
-        Identifier normalIdentifier = Identifier.of(namespace, normalPath);
-        return List.of(normalIdentifier);
-    }, INativeImageExt::radiance$getNormalNativeImage,
-        INativeImageExt::radiance$setNormalNativeImage, TextureTracker.GLID2NormalGLID),
-    FLAG(
+        // Primary: same-directory LabPBR layout (e.g. textures/block/stone_n.png)
+        String[] sameDir = pathComponents.clone();
+        sameDir[sameDir.length - 1] = suffixedFileName;
+        String sameDirPath = String.join("/", sameDir);
+        Identifier sameDirId = Identifier.of(namespace, sameDirPath);
+
+        // Fallback: separate subfolder layout (e.g. textures/normal/block/stone_n.png)
+        String subfolderPath = sameDirPath.replace("textures/", "textures/normal/");
+        Identifier subfolderId = Identifier.of(namespace, subfolderPath);
+
+        return List.of(sameDirId, subfolderId);
+    }, INativeImageExt::neoVoxelRT$getNormalNativeImage,
+        INativeImageExt::neoVoxelRT$setNormalNativeImage,
+        INativeImageExt::neoVoxelRT$getNormalUploadedLevelsMask,
+        INativeImageExt::neoVoxelRT$setNormalUploadedLevelsMask,
+        TextureTracker.GLID2NormalGLID), FLAG(
         "flag", "_f", (identifier, source) -> {
         String namespace = identifier.getNamespace();
         String path = identifier.getPath();
         String[] pathComponents = path.split("/");
         String[] fileNameComponents = pathComponents[pathComponents.length - 1].split("\\.");
-        String flagFileName = String.join("",
+        String suffixedFileName = String.join("",
             new String[]{fileNameComponents[0], "_f.", fileNameComponents[1]});
 
-        pathComponents[pathComponents.length - 1] = flagFileName;
-        String flagPath = String.join("/", pathComponents)
-            .replace("textures/", "textures/flag/");
-        Identifier flagIdentifier = Identifier.of(namespace, flagPath);
-        return List.of(flagIdentifier);
-    }, INativeImageExt::radiance$getFlagNativeImage,
-        INativeImageExt::radiance$setFlagNativeImage, TextureTracker.GLID2FlagGLID);
+        // Primary: same-directory layout (e.g. textures/block/stone_f.png)
+        String[] sameDir = pathComponents.clone();
+        sameDir[sameDir.length - 1] = suffixedFileName;
+        String sameDirPath = String.join("/", sameDir);
+        Identifier sameDirId = Identifier.of(namespace, sameDirPath);
+
+        // Fallback: separate subfolder layout (e.g. textures/flag/block/stone_f.png)
+        String subfolderPath = sameDirPath.replace("textures/", "textures/flag/");
+        Identifier subfolderId = Identifier.of(namespace, subfolderPath);
+
+        return List.of(sameDirId, subfolderId);
+    }, INativeImageExt::neoVoxelRT$getFlagNativeImage,
+        INativeImageExt::neoVoxelRT$setFlagNativeImage,
+        INativeImageExt::neoVoxelRT$getFlagUploadedLevelsMask,
+        INativeImageExt::neoVoxelRT$setFlagUploadedLevelsMask,
+        TextureTracker.GLID2FlagGLID);
 
     private static final List<AuxiliaryTextures> ALL_TEXTURES = Collections.unmodifiableList(
         Arrays.stream(values()).collect(Collectors.toList()));
@@ -69,25 +95,40 @@ public enum AuxiliaryTextures {
     private final IdentifierCandidateProvider identifierCandidateProvider;
     private final Getter getter;
     private final Setter setter;
+    private final IntGetter uploadedLevelsMaskGetter;
+    private final IntSetter uploadedLevelsMaskSetter;
     private final String name;
     private final Map<Integer, Integer> GLIDMapping;
 
     AuxiliaryTextures(String name, String suffix,
         IdentifierCandidateProvider identifierCandidateProvider, Getter getter, Setter setter,
+        IntGetter uploadedLevelsMaskGetter, IntSetter uploadedLevelsMaskSetter,
         Map<Integer, Integer> GLIDMapping) {
         this.suffix = suffix;
         this.identifierCandidateProvider = identifierCandidateProvider;
         this.getter = getter;
         this.setter = setter;
+        this.uploadedLevelsMaskGetter = uploadedLevelsMaskGetter;
+        this.uploadedLevelsMaskSetter = uploadedLevelsMaskSetter;
         this.name = name;
         this.GLIDMapping = GLIDMapping;
+    }
+
+    private static int getLevelBit(int level) {
+        if (level <= 0) {
+            return 1;
+        }
+        if (level >= 30) {
+            return 1 << 30;
+        }
+        return 1 << level;
     }
 
     public static void loadAndUpload(NativeImage source, INativeImageExt sourceExt, int level,
         int offsetX, int offsetY, int unpackSkipPixels, int unpackSkipRows, int regionWidth,
         int regionHeight, boolean blur) {
-        int targetId = sourceExt.radiance$getTargetID();
-        Identifier identifier = sourceExt.radiance$getIdentifier();
+        int targetId = sourceExt.neoVoxelRT$getTargetID();
+        Identifier identifier = sourceExt.neoVoxelRT$getIdentifier();
 
         ResourceManager resourceManager = MinecraftClient.getInstance().getResourceManager();
 
@@ -102,13 +143,22 @@ public enum AuxiliaryTextures {
                 return;
             }
 
+            int levelBit = getLevelBit(level);
             for (AuxiliaryTextures auxiliaryTexture : ALL_TEXTURES) {
                 NativeImage auxiliaryTemplateImage = auxiliaryTexture.getter.get(sourceExt);
+                int uploadedLevelsMask = auxiliaryTexture.uploadedLevelsMaskGetter.get(sourceExt);
+
+                if (auxiliaryTemplateImage != null
+                    && (uploadedLevelsMask & levelBit) != 0
+                    && auxiliaryTexture.GLIDMapping.containsKey(targetId)) {
+                    continue;
+                }
+
                 int auxiliaryTargetId;
 
                 // ensure the texture exists
                 TextureTracker.Texture texture = TextureTracker.GLID2Texture.get(targetId);
-                VulkanConstants.VkFormat auxiliaryFormat = texture.format().toUnorm();
+                VulkanConstants.VkFormat auxFormat = texture.format().toUnorm();
                 if (!auxiliaryTexture.GLIDMapping.containsKey(targetId)) {
                     auxiliaryTargetId = TextureProxy.generateTextureId();
 //                    System.out.println(
@@ -116,10 +166,10 @@ public enum AuxiliaryTextures {
 //                            + auxiliaryTargetId);
 
                     TextureProxy.prepareImage(auxiliaryTargetId, texture.maxLayer() + 1,
-                        texture.width(), texture.height(), auxiliaryFormat);
+                        texture.width(), texture.height(), auxFormat);
                     TextureTracker.GLID2Texture.put(auxiliaryTargetId,
                         new TextureTracker.Texture(texture.width(), texture.height(),
-                            texture.channel(), auxiliaryFormat, texture.maxLayer()));
+                            texture.channel(), auxFormat, texture.maxLayer()));
                     auxiliaryTexture.GLIDMapping.put(targetId, auxiliaryTargetId);
                 } else {
                     auxiliaryTargetId = auxiliaryTexture.GLIDMapping.get(targetId);
@@ -128,12 +178,12 @@ public enum AuxiliaryTextures {
                         auxiliaryTargetId);
                     if (texture.width() != auxiliaryTrackerTexture.width()
                         || texture.height() != auxiliaryTrackerTexture.height()
-                        || auxiliaryTrackerTexture.format() != auxiliaryFormat) {
+                        || auxiliaryTrackerTexture.format() != auxFormat) {
                         TextureProxy.prepareImage(auxiliaryTargetId, texture.maxLayer() + 1,
-                            texture.width(), texture.height(), auxiliaryFormat);
+                            texture.width(), texture.height(), auxFormat);
                         TextureTracker.GLID2Texture.put(auxiliaryTargetId,
                             new TextureTracker.Texture(texture.width(), texture.height(),
-                                texture.channel(), auxiliaryFormat, texture.maxLayer()));
+                                texture.channel(), auxFormat, texture.maxLayer()));
                     }
                 }
 
@@ -153,6 +203,7 @@ public enum AuxiliaryTextures {
                                 optionalResource.get().getInputStream())) {
                                 auxiliaryTemplateImage = MipmapUtil.getSpecificMipmapLevelImage(
                                     tmpImage, level);
+
                             } catch (IOException e) {
                                 throw new RuntimeException(e);
                             }
@@ -168,9 +219,9 @@ public enum AuxiliaryTextures {
                 }
 
                 if (auxiliaryTemplateImage != null) {
-                    NativeImage auxiliaryImage = ((com.radiance.mixin_related.extensions.vulkan_render_integration.INativeImageExt) (Object) auxiliaryTemplateImage).radiance$alignTo(
+                    NativeImage auxiliaryImage = ((com.radiance.mixin_related.extensions.vulkan_render_integration.INativeImageExt) (Object) auxiliaryTemplateImage).neoVoxelRT$alignTo(
                         source);
-                    ((INativeImageExt) (Object) auxiliaryImage).radiance$setTargetID(
+                    ((INativeImageExt) (Object) auxiliaryImage).neoVoxelRT$setTargetID(
                         auxiliaryTargetId);
                     if (auxiliaryTemplateImage != auxiliaryImage) {
                         auxiliaryTemplateImage.close();
@@ -186,6 +237,8 @@ public enum AuxiliaryTextures {
                     auxiliaryImage.upload(level, offsetX, offsetY, unpackSkipPixels, unpackSkipRows,
                         regionWidth, regionHeight, blur);
                     auxiliaryTexture.setter.set(sourceExt, auxiliaryImage);
+                    auxiliaryTexture.uploadedLevelsMaskSetter.set(sourceExt,
+                        uploadedLevelsMask | levelBit);
                 }
             }
         }
@@ -204,5 +257,15 @@ public enum AuxiliaryTextures {
     public interface Setter {
 
         void set(INativeImageExt nativeImageExt, NativeImage nativeImage);
+    }
+
+    public interface IntGetter {
+
+        int get(INativeImageExt nativeImageExt);
+    }
+
+    public interface IntSetter {
+
+        void set(INativeImageExt nativeImageExt, int value);
     }
 }

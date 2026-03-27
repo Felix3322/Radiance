@@ -9,7 +9,6 @@ import static org.lwjgl.system.MemoryUtil.memAddress;
 import com.radiance.client.constant.Constants;
 import com.radiance.client.constant.Constants.RayTracingFlags;
 import com.radiance.client.proxy.vulkan.BufferProxy;
-import com.radiance.client.texture.TextureTracker;
 import com.radiance.client.vertex.PBRVertexConsumer;
 import com.radiance.client.vertex.StorageVertexConsumerProvider;
 import com.radiance.mixin_related.extensions.vulkan_render_integration.IHeldItemRendererExt;
@@ -17,11 +16,7 @@ import com.radiance.mixin_related.extensions.vulkan_render_integration.IParticle
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
@@ -61,7 +56,6 @@ import net.minecraft.client.render.item.HeldItemRenderer;
 import net.minecraft.client.render.model.ModelBaker;
 import net.minecraft.client.texture.MissingSprite;
 import net.minecraft.client.texture.TextureManager;
-import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
@@ -70,6 +64,7 @@ import net.minecraft.entity.player.BlockBreakingInfo;
 import net.minecraft.entity.projectile.FishingBobberEntity;
 import net.minecraft.util.Colors;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Pair;
 import net.minecraft.util.crash.CrashException;
 import net.minecraft.util.crash.CrashReport;
 import net.minecraft.util.crash.CrashReportSection;
@@ -87,36 +82,14 @@ public class EntityProxy {
 
     public static final ConcurrentMap<Class<? extends Particle>, AtomicInteger> PARTICLE_COUNTERS = new ConcurrentHashMap<>();
     private static final int DEFAULT_WORLD_ENTITY_BUFFER_SIZE = 786432;
+    private static final int BLOCK_ENTITY_BUFFER_SIZE = 131072;
     private static final int BLOCK_CRUMBLING_BUFFER_SIZE = 65536;
-    private static final ThreadLocal<BuildScratch> BUILD_SCRATCH =
-        ThreadLocal.withInitial(BuildScratch::new);
-    private static final ConcurrentMap<String, ByteBuffer> GEOMETRY_GROUP_NAME_CACHE =
-        new ConcurrentHashMap<>();
-    private static EntityReplayCache worldEntityReplayCache = null;
-    private static final EnumMap<BlockEntityUpdateBucket, BlockEntityReplayCache>
-        blockEntityReplayCaches = new EnumMap<>(BlockEntityUpdateBucket.class);
-    private static final EnumMap<ParticleUpdateBucket, ParticleReplayCache>
-        particleReplayCaches = new EnumMap<>(ParticleUpdateBucket.class);
-    private static long worldEntityReplayFrameCounter = 0L;
-    private static long blockEntityReplayFrameCounter = 0L;
-    private static long particleReplayFrameCounter = 0L;
+    private static final double BLOCK_ENTITY_RENDER_DISTANCE_SQ = 96.0 * 96.0;
 
     private static final Identifier SUN_TEXTURE = Identifier.ofVanilla(
         "textures/environment/sun.png");
     private static final Identifier MOON_PHASES_TEXTURE = Identifier.ofVanilla(
         "textures/environment/moon_phases.png");
-
-    private enum BlockEntityUpdateBucket {
-        CRITICAL,
-        ACTIVE,
-        DECORATIVE
-    }
-
-    private enum ParticleUpdateBucket {
-        CRITICAL,
-        GENERAL,
-        BACKGROUND
-    }
 
     public static void processWorldEntityRenderData(
         StorageVertexConsumerProvider storageVertexConsumerProvider,
@@ -200,11 +173,10 @@ public class EntityProxy {
                 continue;
             }
 
-            boolean layerReflect = RayTracingTuning.shouldReflectLayer(layer, reflect);
             if (layer.name.contains("water_mask")) {
-                waterMaskRenderData.add(new EntityRenderLayer(layer, buffer, layerReflect));
+                waterMaskRenderData.add(new EntityRenderLayer(layer, buffer, reflect));
             } else {
-                entityRenderData.add(new EntityRenderLayer(layer, buffer, layerReflect));
+                entityRenderData.add(new EntityRenderLayer(layer, buffer, reflect));
             }
         }
 
@@ -223,27 +195,23 @@ public class EntityProxy {
         RenderTickCounter tickCounter,
         boolean canDrawEntityOutlines) {
         MatrixStack matrixStack = new MatrixStack();
-        worldEntityReplayFrameCounter++;
 
         MinecraftClient client = MinecraftClient.getInstance();
         TickManager
             tickManager =
             Objects.requireNonNull(client.world)
                 .getTickManager();
-        int entityUpdateInterval = RayTracingTuning.entityUpdateIntervalFrames();
-        Map<Integer, EntityReplayState> entityReplayStates = captureWorldEntityReplayStates(camera,
-            renderedEntities, tickCounter, tickManager);
-        if (entityUpdateInterval > 1 && tryReplayWorldEntities(entityReplayStates,
-            entityUpdateInterval)) {
-            return;
-        }
-        if (entityUpdateInterval <= 1) {
-            clearWorldEntityReplayCache();
-        }
 
         List<StorageVertexConsumerProvider> entityStorageVertexConsumerProviders = new ArrayList<>();
         EntityRenderDataList entityRenderDataList = new EntityRenderDataList();
         for (Entity entity : renderedEntities) {
+
+            if (entity.age == 0) {
+                entity.lastRenderX = entity.getX();
+                entity.lastRenderY = entity.getY();
+                entity.lastRenderZ = entity.getZ();
+            }
+
             StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
                 DEFAULT_WORLD_ENTITY_BUFFER_SIZE);
             entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
@@ -265,12 +233,13 @@ public class EntityProxy {
                 vertexConsumerProvider = entityStorageVertexConsumerProvider;
             }
 
-            EntityReplayState entityReplayState = entityReplayStates.get(System.identityHashCode(
-                entity));
-            float tickDelta = entityReplayState.tickDelta();
-            double entityPosX = entityReplayState.x();
-            double entityPosY = entityReplayState.y();
-            double entityPosZ = entityReplayState.z();
+            float tickDelta = tickCounter.getTickDelta(!tickManager.shouldSkipTick(entity));
+            double entityPosX = MathHelper.lerp(tickDelta, entity.lastRenderX,
+                entity.getX());
+            double entityPosY = MathHelper.lerp(tickDelta, entity.lastRenderY,
+                entity.getY());
+            double entityPosZ = MathHelper.lerp(tickDelta, entity.lastRenderZ,
+                entity.getZ());
 
             entityRenderDispatcher.render(entity,
                 0,
@@ -281,7 +250,7 @@ public class EntityProxy {
                 vertexConsumerProvider,
                 entityRenderDispatcher.getLight(entity, tickDelta));
 
-            if (entityReplayState.rtFlag() == Constants.RayTracingFlags.PLAYER.getValue()) {
+            if (entity.equals(camera.getFocusedEntity())) {
                 processWorldEntityRenderData(entityStorageVertexConsumerProvider,
                     System.identityHashCode(entity),
                     entityPosX,
@@ -290,8 +259,7 @@ public class EntityProxy {
                     Constants.RayTracingFlags.PLAYER,
                     true,
                     entityRenderDataList);
-            } else if (entityReplayState.rtFlag()
-                == Constants.RayTracingFlags.FISHING_BOBBER.getValue()) {
+            } else if (entity instanceof FishingBobberEntity) {
                 processWorldEntityRenderData(entityStorageVertexConsumerProvider,
                     System.identityHashCode(entity),
                     entityPosX,
@@ -312,93 +280,167 @@ public class EntityProxy {
             }
         }
 
-        if (entityUpdateInterval > 1 && !entityRenderDataList.isEmpty()) {
-            replaceWorldEntityReplayCache(createEntityReplayCache(entityRenderDataList,
-                entityReplayStates));
-        } else {
-            clearWorldEntityReplayCache();
-        }
         queueBuild(entityStorageVertexConsumerProviders, entityRenderDataList);
     }
 
-    public static synchronized BlockEntityQueueResult queueBlockEntitiesRebuild(
-        List<ChunkBuilder.BuiltChunk> visibleBuiltChunks,
+    public static synchronized Pair<List<StorageVertexConsumerProvider>, EntityRenderDataList> queueBlockEntitiesRebuild(
+        Camera camera,
+        BuiltChunkStorage chunks,
         Set<BlockEntity> noCullingBlockEntities,
         Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions,
         BlockEntityRenderDispatcher blockEntityRenderDispatcher,
         float tickDelta) {
-        blockEntityReplayFrameCounter++;
-        List<BlockEntityRenderEntry> blockEntityRenderEntries = collectBlockEntityRenderEntries(
-            visibleBuiltChunks, noCullingBlockEntities, blockBreakingProgressions);
-        EnumMap<BlockEntityUpdateBucket, List<BlockEntityRenderEntry>> bucketEntries =
-            bucketBlockEntityRenderEntries(blockEntityRenderEntries);
-        List<StorageVertexConsumerProvider> freshEntityStorageVertexConsumerProviders =
-            new ArrayList<>();
-        EntityRenderDataList freshEntityRenderDataList = new EntityRenderDataList();
-        EntityRenderDataList replayedEntityRenderDataList = new EntityRenderDataList();
-        List<StorageVertexConsumerProvider> freshCrumblingStorageVertexConsumerProviders =
-            new ArrayList<>();
-        EntityRenderDataList freshCrumblingRenderDataList = new EntityRenderDataList();
-        EntityRenderDataList replayedCrumblingRenderDataList = new EntityRenderDataList();
+        MatrixStack matrixStack = new MatrixStack();
+        List<StorageVertexConsumerProvider> entityStorageVertexConsumerProviders = new ArrayList<>();
+        EntityRenderDataList entityRenderDataList = new EntityRenderDataList();
 
-        for (BlockEntityUpdateBucket bucket : BlockEntityUpdateBucket.values()) {
-            List<BlockEntityRenderEntry> entriesForBucket = bucketEntries.getOrDefault(bucket,
-                List.of());
-            if (entriesForBucket.isEmpty()) {
-                clearBlockEntityReplayCache(bucket);
+        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders = new ArrayList<>();
+        EntityRenderDataList crumblingRenderDataList = new EntityRenderDataList();
+
+        Vec3d cameraPos = camera.getPos();
+        BlockPos cameraBlockPos = camera.getBlockPos();
+        double cameraX = cameraPos.getX();
+        double cameraY = cameraPos.getY();
+        double cameraZ = cameraPos.getZ();
+        for (ChunkBuilder.BuiltChunk builtChunk : chunks.chunks) {
+            if (builtChunk == null) {
                 continue;
             }
 
-            int entityUpdateInterval = blockEntityUpdateIntervalFrames(bucket);
-            Map<Integer, BlockEntityReplayState> blockEntityReplayStates =
-                captureBlockEntityReplayStates(entriesForBucket);
-            if (entityUpdateInterval > 1 && tryReplayBlockEntities(bucket, blockEntityReplayStates,
-                entityUpdateInterval, replayedEntityRenderDataList,
-                replayedCrumblingRenderDataList)) {
+            BlockPos chunkCenterPos = builtChunk.getOrigin().add(8, 8, 8);
+            if (chunkCenterPos.getSquaredDistance(cameraBlockPos) > BLOCK_ENTITY_RENDER_DISTANCE_SQ) {
                 continue;
             }
 
-            BlockEntityBuildBatch blockEntityBuildBatch = renderBlockEntityEntries(
-                entriesForBucket, blockEntityRenderDispatcher, tickDelta);
-            freshEntityStorageVertexConsumerProviders.addAll(
-                blockEntityBuildBatch.entityStorageVertexConsumerProviders());
-            freshEntityRenderDataList.addAll(blockEntityBuildBatch.entityRenderDataList());
-            freshCrumblingStorageVertexConsumerProviders.addAll(
-                blockEntityBuildBatch.crumblingStorageVertexConsumerProviders());
-            freshCrumblingRenderDataList.addAll(blockEntityBuildBatch.crumblingRenderDataList());
+            List<BlockEntity>
+                list =
+                builtChunk.getData()
+                    .getBlockEntities();
+            if (!list.isEmpty()) {
+                for (BlockEntity blockEntity : list) {
+                    BlockPos blockPos = blockEntity.getPos();
+                    if (blockPos.getSquaredDistanceFromCenter(cameraX, cameraY, cameraZ)
+                        > BLOCK_ENTITY_RENDER_DISTANCE_SQ) {
+                        continue;
+                    }
 
-            if (entityUpdateInterval > 1 && (!blockEntityBuildBatch.entityRenderDataList().isEmpty()
-                || !blockEntityBuildBatch.crumblingRenderDataList().isEmpty())) {
-                replaceBlockEntityReplayCache(bucket, createBlockEntityReplayCache(
-                    blockEntityBuildBatch.entityRenderDataList(),
-                    blockEntityBuildBatch.crumblingRenderDataList(), blockEntityReplayStates));
-            } else {
-                clearBlockEntityReplayCache(bucket);
+                    StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+                        BLOCK_ENTITY_BUFFER_SIZE);
+                    entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
+                    StorageVertexConsumerProvider crumblingStorageVertexConsumerProvider = null;
+
+                    VertexConsumerProvider vertexConsumerProvider = entityStorageVertexConsumerProvider;
+
+                    double entityPosX = blockPos.getX();
+                    double entityPosY = blockPos.getY();
+                    double entityPosZ = blockPos.getZ();
+
+                    matrixStack.push();
+                    SortedSet<BlockBreakingInfo> sortedSet = blockBreakingProgressions.get(
+                        blockPos.asLong());
+                    if (sortedSet != null && !sortedSet.isEmpty()) {
+                        int
+                            stage =
+                            sortedSet.last()
+                                .getStage();
+                        if (stage >= 0 && stage < ModelBaker.BLOCK_DESTRUCTION_RENDER_LAYERS.size()) {
+                            crumblingStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+                                BLOCK_CRUMBLING_BUFFER_SIZE);
+                            crumblingStorageVertexConsumerProviders.add(
+                                crumblingStorageVertexConsumerProvider);
+
+                            MatrixStack.Entry entry = matrixStack.peek();
+                            VertexConsumer
+                                crumblingConsumer =
+                                new OverlayVertexConsumer(
+                                    crumblingStorageVertexConsumerProvider.getBuffer(
+                                        ModelBaker.BLOCK_DESTRUCTION_RENDER_LAYERS.get(
+                                            stage)), entry, 1.0F);
+                            vertexConsumerProvider = renderLayer -> {
+                                VertexConsumer vertexConsumer2 = entityStorageVertexConsumerProvider.getBuffer(
+                                    renderLayer);
+                                return renderLayer.hasCrumbling() ? VertexConsumers.union(
+                                    crumblingConsumer,
+                                    vertexConsumer2) :
+                                    vertexConsumer2;
+                            };
+                        }
+                    }
+
+                    blockEntityRenderDispatcher.render(blockEntity, tickDelta, matrixStack,
+                        vertexConsumerProvider);
+                    matrixStack.pop();
+
+                    processWorldEntityRenderData(entityStorageVertexConsumerProvider,
+                        System.identityHashCode(blockEntity),
+                        entityPosX,
+                        entityPosY,
+                        entityPosZ,
+                        Constants.RayTracingFlags.WORLD,
+                        true,
+                        entityRenderDataList);
+                    if (crumblingStorageVertexConsumerProvider != null) {
+                        processWorldEntityRenderData(crumblingStorageVertexConsumerProvider,
+                            System.identityHashCode(blockEntity) + 1,
+                            entityPosX,
+                            entityPosY,
+                            entityPosZ,
+                            Constants.RayTracingFlags.WORLD,
+                            true,
+                            crumblingRenderDataList);
+                    }
+                }
             }
         }
 
-        if (!replayedEntityRenderDataList.isEmpty()) {
-            queueBuildWithoutClose(replayedEntityRenderDataList);
+        for (BlockEntity blockEntity : noCullingBlockEntities) {
+            BlockPos blockPos = blockEntity.getPos();
+            if (blockPos.getSquaredDistanceFromCenter(cameraX, cameraY, cameraZ)
+                > BLOCK_ENTITY_RENDER_DISTANCE_SQ) {
+                continue;
+            }
+
+            StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+                BLOCK_ENTITY_BUFFER_SIZE);
+            entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
+
+            double entityPosX = blockPos.getX();
+            double entityPosY = blockPos.getY();
+            double entityPosZ = blockPos.getZ();
+
+            matrixStack.push();
+            blockEntityRenderDispatcher.render(blockEntity, tickDelta, matrixStack,
+                entityStorageVertexConsumerProvider);
+            matrixStack.pop();
+
+            processWorldEntityRenderData(entityStorageVertexConsumerProvider,
+                System.identityHashCode(blockEntity),
+                entityPosX,
+                entityPosY,
+                entityPosZ,
+                Constants.RayTracingFlags.WORLD,
+                true,
+                entityRenderDataList);
         }
-        if (!freshEntityRenderDataList.isEmpty()) {
-            queueBuild(freshEntityStorageVertexConsumerProviders, freshEntityRenderDataList);
-        }
-        return new BlockEntityQueueResult(freshCrumblingStorageVertexConsumerProviders,
-            freshCrumblingRenderDataList, replayedCrumblingRenderDataList);
+
+        queueBuild(entityStorageVertexConsumerProviders, entityRenderDataList);
+
+        return new Pair<>(crumblingStorageVertexConsumerProviders, crumblingRenderDataList);
     }
 
     public static void queueCrumblingRebuild(Camera camera,
         Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions,
         BlockRenderManager blockRenderManager,
         ClientWorld world,
-        BlockEntityQueueResult blockEntityQueueResult) {
-        if (blockEntityQueueResult.isEmpty()
-            && blockBreakingProgressions.isEmpty()) {
+        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders,
+        EntityRenderDataList crumblingRenderDataList) {
+        if (crumblingStorageVertexConsumerProviders.isEmpty() && blockBreakingProgressions.isEmpty()) {
             return;
         }
 
         MatrixStack matrixStack = new MatrixStack();
-        List<StorageVertexConsumerProvider> blockCrumblingStorageVertexConsumerProviders =
+        List<StorageVertexConsumerProvider>
+            blockCrumblingStorageVertexConsumerProviders =
             new ArrayList<>(Math.max(1, blockBreakingProgressions.size()));
         EntityRenderDataList blockCrumblingRenderDataList = new EntityRenderDataList();
 
@@ -454,25 +496,25 @@ public class EntityProxy {
             }
         }
 
-        if (!blockEntityQueueResult.replayedCrumblingRenderDataList().isEmpty()) {
-            queueBuildWithoutClose(blockEntityQueueResult.replayedCrumblingRenderDataList(), 0.0f,
-                Constants.Coordinates.WORLD, true);
+        List<StorageVertexConsumerProvider>
+            storageVertexConsumerProviders =
+            new ArrayList<>(
+                crumblingStorageVertexConsumerProviders.size() +
+                    blockCrumblingStorageVertexConsumerProviders.size());
+        storageVertexConsumerProviders.addAll(crumblingStorageVertexConsumerProviders);
+        storageVertexConsumerProviders.addAll(blockCrumblingStorageVertexConsumerProviders);
+
+        EntityRenderDataList renderDataList = new EntityRenderDataList();
+        for (EntityRenderData entityRenderData : crumblingRenderDataList) {
+            renderDataList.add(entityRenderData);
         }
-        if (!blockEntityQueueResult.freshCrumblingRenderDataList().isEmpty()) {
-            if (blockEntityQueueResult.freshCrumblingStorageVertexConsumerProviders().isEmpty()) {
-                queueBuildWithoutClose(blockEntityQueueResult.freshCrumblingRenderDataList(), 0.0f,
-                    Constants.Coordinates.WORLD,
-                    true);
-            } else {
-                queueBuild(blockEntityQueueResult.freshCrumblingStorageVertexConsumerProviders(),
-                    blockEntityQueueResult.freshCrumblingRenderDataList(), 0.0f,
-                    Constants.Coordinates.WORLD, true);
-            }
+        for (EntityRenderData entityRenderData : blockCrumblingRenderDataList) {
+            renderDataList.add(entityRenderData);
         }
-        if (!blockCrumblingRenderDataList.isEmpty()) {
-            queueBuild(blockCrumblingStorageVertexConsumerProviders, blockCrumblingRenderDataList,
-                0.0f, Constants.Coordinates.WORLD, true);
-        }
+
+        queueBuild(storageVertexConsumerProviders, renderDataList, 0.0f,
+            Constants.Coordinates.WORLD,
+            true);
     }
 
     public static void queueHandRebuild(BufferBuilderStorage buffers, float tickDelta,
@@ -493,7 +535,7 @@ public class EntityProxy {
         if (client.options.getPerspective()
             .isFirstPerson() && !bl && !client.options.hudHidden &&
             client.interactionManager.getCurrentGameMode() != GameMode.SPECTATOR) {
-            ((IHeldItemRendererExt) firstPersonRenderer).radiance$renderItem(tickDelta,
+            ((IHeldItemRendererExt) firstPersonRenderer).neoVoxelRT$renderItem(tickDelta,
                 matrixStack,
                 storageVertexConsumerProvider,
                 client.player,
@@ -524,57 +566,73 @@ public class EntityProxy {
     }
 
     public static void queueParticleRebuild(Camera camera, float tickDelta, Frustum frustum) {
-        particleReplayFrameCounter++;
+        List<StorageVertexConsumerProvider> storageVertexConsumerProviders = new ArrayList<>();
+        EntityRenderDataList renderDataList = new EntityRenderDataList();
+
+        StorageVertexConsumerProvider postStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+            0);
+        storageVertexConsumerProviders.add(postStorageVertexConsumerProvider);
+
         ParticleManager particleManager = MinecraftClient.getInstance().particleManager;
         IParticleManagerExt particleManagerExt = (IParticleManagerExt) particleManager;
-        Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.radiance$getParticles();
-        EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketEntries =
-            bucketParticleRenderEntries(particleManagerExt, particles, camera, frustum);
-        List<StorageVertexConsumerProvider> freshStorageVertexConsumerProviders = new ArrayList<>();
-        EntityRenderDataList freshRenderDataList = new EntityRenderDataList();
-        EntityRenderDataList replayedRenderDataList = new EntityRenderDataList();
+        Map<ParticleTextureSheet, Queue<Particle>> particles = particleManagerExt.neoVoxelRT$getParticles();
 
-        for (ParticleUpdateBucket bucket : ParticleUpdateBucket.values()) {
-            List<ParticleRenderEntry> entriesForBucket = bucketEntries.getOrDefault(bucket,
-                List.of());
-            if (entriesForBucket.isEmpty()) {
-                clearParticleReplayCache(bucket);
-                continue;
-            }
+        for (ParticleTextureSheet particleTextureSheet : particleManagerExt.neoVoxelRT$getTextureSheets()) {
+            Queue<Particle> particleQueue = particles.get(particleTextureSheet);
+            if (particleQueue != null && !particleQueue.isEmpty()) {
+                for (Particle particle : particleQueue) {
 
-            int particleUpdateInterval = particleUpdateIntervalFrames(bucket);
-            ParticleReplayState particleReplayState = captureParticleReplayState(entriesForBucket);
-            if (particleUpdateInterval > 1 && tryReplayParticles(bucket, particleReplayState,
-                particleUpdateInterval, replayedRenderDataList)) {
-                continue;
-            }
+                    VertexConsumer
+                        vertexConsumer =
+                        postStorageVertexConsumerProvider.getBuffer(
+                            Objects.requireNonNull(
+                                particleTextureSheet.renderType()));
 
-            StorageVertexConsumerProvider storageVertexConsumerProvider =
-                new StorageVertexConsumerProvider(0);
-            freshStorageVertexConsumerProviders.add(storageVertexConsumerProvider);
-            int bucketRenderDataStart = freshRenderDataList.size();
-            renderParticles(entriesForBucket, storageVertexConsumerProvider, camera, tickDelta);
-            processWorldEntityRenderData(storageVertexConsumerProvider, particleBucketHash(bucket),
-                0, 0, 0, Constants.RayTracingFlags.PARTICLE, true, freshRenderDataList);
-            EntityRenderDataList bucketRenderDataList = sliceEntityRenderDataList(
-                freshRenderDataList, bucketRenderDataStart);
-
-            if (particleUpdateInterval > 1 && !bucketRenderDataList.isEmpty()) {
-                replaceParticleReplayCache(bucket, createParticleReplayCache(bucketRenderDataList,
-                    particleReplayState));
-            } else {
-                clearParticleReplayCache(bucket);
+                    try {
+                        particle.render(vertexConsumer, camera, tickDelta);
+                    } catch (Throwable var11) {
+                        CrashReport crashReport = CrashReport.create(var11, "Rendering Particle");
+                        CrashReportSection crashReportSection = crashReport.addElement(
+                            "Particle being rendered");
+                        crashReportSection.add("Particle", particle);
+                        crashReportSection.add("Particle Type", particleTextureSheet);
+                        throw new CrashException(crashReport);
+                    }
+                }
             }
         }
 
-        if (!replayedRenderDataList.isEmpty()) {
-            queueBuildWithoutClose(replayedRenderDataList, 0.0f,
-                Constants.Coordinates.CAMERA_SHIFT, false);
+        processPostEntityRenderData(postStorageVertexConsumerProvider, 0, 0, 0, 0, renderDataList);
+
+        StorageVertexConsumerProvider storageVertexConsumerProvider = new StorageVertexConsumerProvider(
+            0);
+        storageVertexConsumerProviders.add(storageVertexConsumerProvider);
+
+        Queue<Particle> customParticleQueue = particles.get(ParticleTextureSheet.CUSTOM);
+        if (customParticleQueue != null && !customParticleQueue.isEmpty()) {
+            for (Particle particle : customParticleQueue) {
+
+                MatrixStack matrixStack = new MatrixStack();
+
+                try {
+                    particle.renderCustom(matrixStack, storageVertexConsumerProvider, camera,
+                        tickDelta);
+                } catch (Throwable var10) {
+                    CrashReport crashReport = CrashReport.create(var10, "Rendering Particle");
+                    CrashReportSection crashReportSection = crashReport.addElement(
+                        "Particle being rendered");
+                    crashReportSection.add("Particle", particle::toString);
+                    crashReportSection.add("Particle Type", "Custom");
+                    throw new CrashException(crashReport);
+                }
+            }
         }
-        if (!freshRenderDataList.isEmpty()) {
-            queueBuild(freshStorageVertexConsumerProviders, freshRenderDataList, 0.0f,
-                Constants.Coordinates.CAMERA_SHIFT, false);
-        }
+
+        processWorldEntityRenderData(storageVertexConsumerProvider, 0, 0, 0, 0,
+            Constants.RayTracingFlags.PARTICLE, true, renderDataList);
+
+        queueBuild(storageVertexConsumerProviders, renderDataList, 0.0f,
+            Constants.Coordinates.CAMERA_SHIFT, false);
     }
 
     public static void queueTargetBlockOutlineRebuild(Camera camera, ClientWorld world) {
@@ -630,7 +688,7 @@ public class EntityProxy {
                         blockPos.getX(),
                         blockPos.getY(),
                         blockPos.getZ(),
-                        Constants.RayTracingFlags.FISHING_BOBBER,
+                        Constants.RayTracingFlags.WORLD,
                         false,
                         renderDataList);
                 }
@@ -670,691 +728,6 @@ public class EntityProxy {
             Constants.Coordinates.CAMERA_SHIFT, false);
     }
 
-    public static void clearReplayCaches() {
-        clearWorldEntityReplayCache();
-        clearBlockEntityReplayCache();
-        clearParticleReplayCache();
-        worldEntityReplayFrameCounter = 0L;
-        blockEntityReplayFrameCounter = 0L;
-        particleReplayFrameCounter = 0L;
-    }
-
-    private static void clearWorldEntityReplayCache() {
-        if (worldEntityReplayCache != null) {
-            worldEntityReplayCache.close();
-            worldEntityReplayCache = null;
-        }
-    }
-
-    private static void clearBlockEntityReplayCache() {
-        for (BlockEntityReplayCache blockEntityReplayCache : blockEntityReplayCaches.values()) {
-            if (blockEntityReplayCache != null) {
-                blockEntityReplayCache.close();
-            }
-        }
-        blockEntityReplayCaches.clear();
-    }
-
-    private static void clearBlockEntityReplayCache(BlockEntityUpdateBucket bucket) {
-        BlockEntityReplayCache blockEntityReplayCache = blockEntityReplayCaches.remove(bucket);
-        if (blockEntityReplayCache != null) {
-            blockEntityReplayCache.close();
-        }
-    }
-
-    private static void clearParticleReplayCache() {
-        for (ParticleReplayCache particleReplayCache : particleReplayCaches.values()) {
-            if (particleReplayCache != null) {
-                particleReplayCache.close();
-            }
-        }
-        particleReplayCaches.clear();
-    }
-
-    private static void clearParticleReplayCache(ParticleUpdateBucket bucket) {
-        ParticleReplayCache particleReplayCache = particleReplayCaches.remove(bucket);
-        if (particleReplayCache != null) {
-            particleReplayCache.close();
-        }
-    }
-
-    private static Map<Integer, EntityReplayState> captureWorldEntityReplayStates(Camera camera,
-        List<Entity> renderedEntities,
-        RenderTickCounter tickCounter,
-        TickManager tickManager) {
-        Map<Integer, EntityReplayState> entityReplayStates = new HashMap<>();
-        for (Entity entity : renderedEntities) {
-            if (entity.age == 0) {
-                entity.lastRenderX = entity.getX();
-                entity.lastRenderY = entity.getY();
-                entity.lastRenderZ = entity.getZ();
-            }
-
-            float tickDelta = tickCounter.getTickDelta(!tickManager.shouldSkipTick(entity));
-            double entityPosX = MathHelper.lerp(tickDelta, entity.lastRenderX, entity.getX());
-            double entityPosY = MathHelper.lerp(tickDelta, entity.lastRenderY, entity.getY());
-            double entityPosZ = MathHelper.lerp(tickDelta, entity.lastRenderZ, entity.getZ());
-            int rtFlag = determineWorldEntityRtFlag(camera, entity);
-
-            entityReplayStates.put(System.identityHashCode(entity),
-                new EntityReplayState(entityPosX, entityPosY, entityPosZ, tickDelta, rtFlag));
-        }
-        return entityReplayStates;
-    }
-
-    private static List<BlockEntityRenderEntry> collectBlockEntityRenderEntries(
-        List<ChunkBuilder.BuiltChunk> visibleBuiltChunks,
-        Set<BlockEntity> noCullingBlockEntities,
-        Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions) {
-        Map<Integer, BlockEntityRenderEntry> blockEntityRenderEntries = new LinkedHashMap<>();
-        if (visibleBuiltChunks != null) {
-            for (ChunkBuilder.BuiltChunk builtChunk : visibleBuiltChunks) {
-                List<BlockEntity> list = builtChunk.getData().getBlockEntities();
-                if (list.isEmpty()) {
-                    continue;
-                }
-                for (BlockEntity blockEntity : list) {
-                    BlockEntityRenderEntry blockEntityRenderEntry = new BlockEntityRenderEntry(
-                        blockEntity,
-                        getBlockBreakingStage(blockBreakingProgressions, blockEntity.getPos()),
-                        blockEntityRenderId(blockEntity, false),
-                        blockEntityRenderId(blockEntity, true));
-                    blockEntityRenderEntries.put(blockEntityRenderEntry.mainRenderId(),
-                        blockEntityRenderEntry);
-                }
-            }
-        }
-        for (BlockEntity blockEntity : noCullingBlockEntities) {
-            BlockEntityRenderEntry blockEntityRenderEntry = new BlockEntityRenderEntry(blockEntity,
-                -1,
-                blockEntityRenderId(blockEntity, false), blockEntityRenderId(blockEntity, true));
-            blockEntityRenderEntries.putIfAbsent(blockEntityRenderEntry.mainRenderId(),
-                blockEntityRenderEntry);
-        }
-        return new ArrayList<>(blockEntityRenderEntries.values());
-    }
-
-    private static List<BlockEntityRenderEntry> collectAllChunkBlockEntityRenderEntries(
-        BuiltChunkStorage chunks,
-        Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions) {
-        List<BlockEntityRenderEntry> blockEntityRenderEntries = new ArrayList<>();
-        for (ChunkBuilder.BuiltChunk builtChunk : chunks.chunks) {
-            List<BlockEntity> list = builtChunk.getData().getBlockEntities();
-            if (list.isEmpty()) {
-                continue;
-            }
-            for (BlockEntity blockEntity : list) {
-                blockEntityRenderEntries.add(new BlockEntityRenderEntry(blockEntity,
-                    getBlockBreakingStage(blockBreakingProgressions, blockEntity.getPos()),
-                    blockEntityRenderId(blockEntity, false),
-                    blockEntityRenderId(blockEntity, true)));
-            }
-        }
-        return blockEntityRenderEntries;
-    }
-
-    private static EnumMap<BlockEntityUpdateBucket, List<BlockEntityRenderEntry>> bucketBlockEntityRenderEntries(
-        List<BlockEntityRenderEntry> blockEntityRenderEntries) {
-        EnumMap<BlockEntityUpdateBucket, List<BlockEntityRenderEntry>> bucketEntries =
-            new EnumMap<>(BlockEntityUpdateBucket.class);
-        for (BlockEntityUpdateBucket bucket : BlockEntityUpdateBucket.values()) {
-            bucketEntries.put(bucket, new ArrayList<>());
-        }
-        for (BlockEntityRenderEntry blockEntityRenderEntry : blockEntityRenderEntries) {
-            bucketEntries.get(classifyBlockEntityUpdateBucket(blockEntityRenderEntry))
-                .add(blockEntityRenderEntry);
-        }
-        return bucketEntries;
-    }
-
-    private static BlockEntityUpdateBucket classifyBlockEntityUpdateBucket(
-        BlockEntityRenderEntry blockEntityRenderEntry) {
-        if (blockEntityRenderEntry.crumblingStage() >= 0) {
-            return BlockEntityUpdateBucket.CRITICAL;
-        }
-
-        String blockEntityName =
-            blockEntityRenderEntry.blockEntity().getClass().getSimpleName().toLowerCase(
-                Locale.ROOT);
-        if (blockEntityName.contains("chest") || blockEntityName.contains("shulker")
-            || blockEntityName.contains("beacon") || blockEntityName.contains("campfire")
-            || blockEntityName.contains("conduit") || blockEntityName.contains("bell")
-            || blockEntityName.contains("endgateway") || blockEntityName.contains("portal")) {
-            return BlockEntityUpdateBucket.CRITICAL;
-        }
-        if (blockEntityName.contains("sign") || blockEntityName.contains("banner")
-            || blockEntityName.contains("skull") || blockEntityName.contains("head")
-            || blockEntityName.contains("spawner") || blockEntityName.contains("furnace")
-            || blockEntityName.contains("brewing") || blockEntityName.contains("enchant")
-            || blockEntityName.contains("pot")) {
-            return BlockEntityUpdateBucket.ACTIVE;
-        }
-        return BlockEntityUpdateBucket.DECORATIVE;
-    }
-
-    private static int blockEntityUpdateIntervalFrames(BlockEntityUpdateBucket bucket) {
-        int baseInterval = RayTracingTuning.blockEntityUpdateIntervalFrames();
-        if (baseInterval <= 1) {
-            return 1;
-        }
-        return switch (bucket) {
-            case CRITICAL -> Math.max(1, baseInterval - 1);
-            case ACTIVE -> baseInterval;
-            case DECORATIVE -> Math.min(6, baseInterval + 2);
-        };
-    }
-
-    private static BlockEntityBuildBatch renderBlockEntityEntries(
-        List<BlockEntityRenderEntry> blockEntityRenderEntries,
-        BlockEntityRenderDispatcher blockEntityRenderDispatcher,
-        float tickDelta) {
-        MatrixStack matrixStack = new MatrixStack();
-        List<StorageVertexConsumerProvider> entityStorageVertexConsumerProviders = new ArrayList<>();
-        EntityRenderDataList entityRenderDataList = new EntityRenderDataList();
-        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders =
-            new ArrayList<>();
-        EntityRenderDataList crumblingRenderDataList = new EntityRenderDataList();
-
-        for (BlockEntityRenderEntry blockEntityRenderEntry : blockEntityRenderEntries) {
-            BlockEntity blockEntity = blockEntityRenderEntry.blockEntity();
-            StorageVertexConsumerProvider entityStorageVertexConsumerProvider =
-                new StorageVertexConsumerProvider(DEFAULT_WORLD_ENTITY_BUFFER_SIZE);
-            entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
-
-            BlockPos blockPos = blockEntity.getPos();
-            double entityPosX = blockPos.getX();
-            double entityPosY = blockPos.getY();
-            double entityPosZ = blockPos.getZ();
-
-            matrixStack.push();
-            VertexConsumerProvider vertexConsumerProvider = entityStorageVertexConsumerProvider;
-            StorageVertexConsumerProvider crumblingStorageVertexConsumerProvider = null;
-            int crumblingStage = blockEntityRenderEntry.crumblingStage();
-            if (crumblingStage >= 0
-                && crumblingStage < ModelBaker.BLOCK_DESTRUCTION_RENDER_LAYERS.size()) {
-                crumblingStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
-                    BLOCK_CRUMBLING_BUFFER_SIZE);
-                crumblingStorageVertexConsumerProviders.add(crumblingStorageVertexConsumerProvider);
-                MatrixStack.Entry entry = matrixStack.peek();
-                VertexConsumer vertexConsumer = new OverlayVertexConsumer(
-                    crumblingStorageVertexConsumerProvider.getBuffer(
-                        ModelBaker.BLOCK_DESTRUCTION_RENDER_LAYERS.get(crumblingStage)), entry,
-                    1.0F);
-                vertexConsumerProvider = renderLayer -> {
-                    VertexConsumer vertexConsumer2 =
-                        entityStorageVertexConsumerProvider.getBuffer(renderLayer);
-                    return renderLayer.hasCrumbling() ? VertexConsumers.union(vertexConsumer,
-                        vertexConsumer2) : vertexConsumer2;
-                };
-            }
-
-            blockEntityRenderDispatcher.render(blockEntity, tickDelta, matrixStack,
-                vertexConsumerProvider);
-            matrixStack.pop();
-
-            processWorldEntityRenderData(entityStorageVertexConsumerProvider,
-                blockEntityRenderEntry.mainRenderId(), entityPosX, entityPosY, entityPosZ,
-                Constants.RayTracingFlags.WORLD, true, entityRenderDataList);
-            if (crumblingStorageVertexConsumerProvider != null) {
-                processWorldEntityRenderData(crumblingStorageVertexConsumerProvider,
-                    blockEntityRenderEntry.crumblingRenderId(), entityPosX, entityPosY, entityPosZ,
-                    Constants.RayTracingFlags.WORLD, true, crumblingRenderDataList);
-            }
-        }
-
-        return new BlockEntityBuildBatch(entityStorageVertexConsumerProviders, entityRenderDataList,
-            crumblingStorageVertexConsumerProviders, crumblingRenderDataList);
-    }
-
-    private static Map<Integer, BlockEntityReplayState> captureBlockEntityReplayStates(
-        List<BlockEntityRenderEntry> blockEntityRenderEntries) {
-        Map<Integer, BlockEntityReplayState> blockEntityReplayStates = new LinkedHashMap<>();
-        for (BlockEntityRenderEntry blockEntityRenderEntry : blockEntityRenderEntries) {
-            BlockEntity blockEntity = blockEntityRenderEntry.blockEntity();
-            BlockPos blockPos = blockEntity.getPos();
-            double entityPosX = blockPos.getX();
-            double entityPosY = blockPos.getY();
-            double entityPosZ = blockPos.getZ();
-            int blockStateHash = Objects.hashCode(blockEntity.getCachedState());
-            blockEntityReplayStates.put(blockEntityRenderEntry.mainRenderId(),
-                new BlockEntityReplayState(entityPosX, entityPosY, entityPosZ, blockStateHash));
-            if (blockEntityRenderEntry.crumblingStage() >= 0) {
-                blockEntityReplayStates.put(blockEntityRenderEntry.crumblingRenderId(),
-                    new BlockEntityReplayState(entityPosX, entityPosY, entityPosZ,
-                        31 * blockStateHash + blockEntityRenderEntry.crumblingStage() + 1));
-            }
-        }
-        return blockEntityReplayStates;
-    }
-
-    private static int getBlockBreakingStage(
-        Long2ObjectMap<SortedSet<BlockBreakingInfo>> blockBreakingProgressions,
-        BlockPos blockPos) {
-        SortedSet<BlockBreakingInfo> sortedSet = blockBreakingProgressions.get(blockPos.asLong());
-        if (sortedSet == null || sortedSet.isEmpty()) {
-            return -1;
-        }
-        return sortedSet.last().getStage();
-    }
-
-    private static EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketParticleRenderEntries(
-        IParticleManagerExt particleManagerExt,
-        Map<ParticleTextureSheet, Queue<Particle>> particles,
-        Camera camera,
-        Frustum frustum) {
-        EnumMap<ParticleUpdateBucket, List<ParticleRenderEntry>> bucketEntries =
-            new EnumMap<>(ParticleUpdateBucket.class);
-        for (ParticleUpdateBucket bucket : ParticleUpdateBucket.values()) {
-            bucketEntries.put(bucket, new ArrayList<>());
-        }
-
-        for (ParticleTextureSheet particleTextureSheet : particleManagerExt.radiance$getTextureSheets()) {
-            Queue<Particle> particleQueue = particles.get(particleTextureSheet);
-            if (particleQueue == null || particleQueue.isEmpty()) {
-                continue;
-            }
-
-            for (Particle particle : particleQueue) {
-                if (isParticleDefinitelyInvisible(particle, camera, frustum)) {
-                    continue;
-                }
-                ParticleRenderEntry particleRenderEntry = new ParticleRenderEntry(particle,
-                    particleTextureSheet, false);
-                bucketEntries.get(classifyParticleUpdateBucket(particleRenderEntry))
-                    .add(particleRenderEntry);
-            }
-        }
-
-        Queue<Particle> customParticleQueue = particles.get(ParticleTextureSheet.CUSTOM);
-        if (customParticleQueue != null && !customParticleQueue.isEmpty()) {
-            for (Particle particle : customParticleQueue) {
-                if (isParticleDefinitelyInvisible(particle, camera, frustum)) {
-                    continue;
-                }
-                ParticleRenderEntry particleRenderEntry = new ParticleRenderEntry(particle,
-                    ParticleTextureSheet.CUSTOM, true);
-                bucketEntries.get(classifyParticleUpdateBucket(particleRenderEntry))
-                    .add(particleRenderEntry);
-            }
-        }
-        return bucketEntries;
-    }
-
-    private static boolean isParticleDefinitelyInvisible(Particle particle, Camera camera,
-        Frustum frustum) {
-        if (particle == null) {
-            return true;
-        }
-        if (frustum == null) {
-            return false;
-        }
-
-        try {
-            return !frustum.isVisible(particle.getBoundingBox());
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static ParticleUpdateBucket classifyParticleUpdateBucket(
-        ParticleRenderEntry particleRenderEntry) {
-        String particleName = particleRenderEntry.particle().getClass().getSimpleName()
-            .toLowerCase(Locale.ROOT);
-        if (particleRenderEntry.custom()) {
-            return ParticleUpdateBucket.GENERAL;
-        }
-        if (particleName.contains("crit") || particleName.contains("sweep")
-            || particleName.contains("firework") || particleName.contains("explosion")
-            || particleName.contains("flame") || particleName.contains("lava")
-            || particleName.contains("campfire") || particleName.contains("portal")
-            || particleName.contains("endrod") || particleName.contains("end_rod")
-            || particleName.contains("lightning") || particleName.contains("rain")
-            || particleName.contains("snow")) {
-            return ParticleUpdateBucket.CRITICAL;
-        }
-        if (particleName.contains("smoke") || particleName.contains("poof")
-            || particleName.contains("dust") || particleName.contains("spell")
-            || particleName.contains("effect") || particleName.contains("cloud")
-            || particleName.contains("ash") || particleName.contains("sculk")) {
-            return ParticleUpdateBucket.GENERAL;
-        }
-        return ParticleUpdateBucket.BACKGROUND;
-    }
-
-    private static int particleUpdateIntervalFrames(ParticleUpdateBucket bucket) {
-        int baseInterval = RayTracingTuning.particleUpdateIntervalFrames();
-        if (baseInterval <= 1) {
-            return 1;
-        }
-        return switch (bucket) {
-            case CRITICAL -> Math.max(1, baseInterval - 1);
-            case GENERAL -> baseInterval;
-            case BACKGROUND -> Math.min(6, baseInterval + 2);
-        };
-    }
-
-    private static int particleBucketHash(ParticleUpdateBucket bucket) {
-        return 0x5000 + bucket.ordinal();
-    }
-
-    private static void renderParticles(List<ParticleRenderEntry> particleRenderEntries,
-        StorageVertexConsumerProvider storageVertexConsumerProvider,
-        Camera camera,
-        float tickDelta) {
-        for (ParticleRenderEntry particleRenderEntry : particleRenderEntries) {
-            Particle particle = particleRenderEntry.particle();
-            if (!particleRenderEntry.custom()) {
-                ParticleVertexConsumerProvider particleVertexConsumerProvider =
-                    new ParticleVertexConsumerProvider(storageVertexConsumerProvider, particle);
-                VertexConsumer vertexConsumer = particleVertexConsumerProvider.getBuffer(
-                    Objects.requireNonNull(particleRenderEntry.textureSheet().renderType()));
-                try {
-                    particle.render(vertexConsumer, camera, tickDelta);
-                } catch (Throwable throwable) {
-                    CrashReport crashReport = CrashReport.create(throwable, "Rendering Particle");
-                    CrashReportSection crashReportSection = crashReport.addElement(
-                        "Particle being rendered");
-                    crashReportSection.add("Particle", particle);
-                    crashReportSection.add("Particle Type", particleRenderEntry.textureSheet());
-                    throw new CrashException(crashReport);
-                }
-                continue;
-            }
-
-            MatrixStack matrixStack = new MatrixStack();
-            ParticleVertexConsumerProvider particleVertexConsumerProvider =
-                new ParticleVertexConsumerProvider(storageVertexConsumerProvider, particle);
-            try {
-                particle.renderCustom(matrixStack, particleVertexConsumerProvider, camera,
-                    tickDelta);
-            } catch (Throwable throwable) {
-                CrashReport crashReport = CrashReport.create(throwable, "Rendering Particle");
-                CrashReportSection crashReportSection = crashReport.addElement(
-                    "Particle being rendered");
-                crashReportSection.add("Particle", particle::toString);
-                crashReportSection.add("Particle Type", "Custom");
-                throw new CrashException(crashReport);
-            }
-        }
-    }
-
-    private static ParticleReplayState captureParticleReplayState(
-        List<ParticleRenderEntry> particleRenderEntries) {
-        long signature = 0xcbf29ce484222325L;
-        int regularParticleCount = 0;
-        int customParticleCount = 0;
-        for (ParticleRenderEntry particleRenderEntry : particleRenderEntries) {
-            signature = mixReplaySignature(signature,
-                System.identityHashCode(particleRenderEntry.textureSheet()));
-            signature = mixReplaySignature(signature,
-                System.identityHashCode(particleRenderEntry.particle()));
-            signature = mixReplaySignature(signature,
-                particleRenderEntry.particle().getClass().hashCode());
-            if (particleRenderEntry.custom()) {
-                customParticleCount++;
-            } else {
-                regularParticleCount++;
-            }
-        }
-        return new ParticleReplayState(regularParticleCount + customParticleCount,
-            customParticleCount, signature);
-    }
-
-    private static float particleEmissionStrength(Particle particle) {
-        String particleName = particle.getClass().getSimpleName().toLowerCase(Locale.ROOT);
-        if (particleName.contains("soul")) {
-            return 1.6f;
-        }
-        if (particleName.contains("flame") || particleName.contains("lava")
-            || particleName.contains("campfire")) {
-            return 1.35f;
-        }
-        if (particleName.contains("endrod") || particleName.contains("end_rod")
-            || particleName.contains("glow") || particleName.contains("firework")
-            || particleName.contains("spark") || particleName.contains("electric")) {
-            return 1.15f;
-        }
-        if (particleName.contains("portal") || particleName.contains("dragon")
-            || particleName.contains("sculk")) {
-            return 0.85f;
-        }
-        if (particleName.contains("spell") || particleName.contains("effect")
-            || particleName.contains("potion")) {
-            return 0.55f;
-        }
-        if (particleName.contains("crit") || particleName.contains("ench")) {
-            return RayTracingTuning.critParticlesGlowStrength();
-        }
-        if (particleName.contains("poof") || particleName.contains("smoke")) {
-            return RayTracingTuning.deathSmokeParticlesGlowStrength();
-        }
-        if (particleName.contains("redstone") || particleName.contains("dust")) {
-            return 0.28f;
-        }
-        if (particleName.contains("wax") || particleName.contains("nautilus")
-            || particleName.contains("composter")) {
-            return 0.18f;
-        }
-        return 0.0f;
-    }
-
-    private static int determineWorldEntityRtFlag(Camera camera, Entity entity) {
-        if (entity.equals(camera.getFocusedEntity())) {
-            return Constants.RayTracingFlags.PLAYER.getValue();
-        }
-        if (entity instanceof FishingBobberEntity) {
-            return Constants.RayTracingFlags.FISHING_BOBBER.getValue();
-        }
-        return Constants.RayTracingFlags.WORLD.getValue();
-    }
-
-    private static boolean tryReplayWorldEntities(Map<Integer, EntityReplayState> entityReplayStates,
-        int entityUpdateInterval) {
-        if (worldEntityReplayCache == null || entityReplayStates.isEmpty()) {
-            return false;
-        }
-
-        if (!canReplayThisFrame(worldEntityReplayFrameCounter, entityUpdateInterval)) {
-            return false;
-        }
-
-        if (worldEntityReplayCache.entityStates.size() != entityReplayStates.size()) {
-            return false;
-        }
-
-        for (Map.Entry<Integer, EntityReplayState> entityReplayStateEntry : entityReplayStates.entrySet()) {
-            EntityReplayState cachedEntityReplayState = worldEntityReplayCache.entityStates.get(
-                entityReplayStateEntry.getKey());
-            if (cachedEntityReplayState == null || cachedEntityReplayState.rtFlag()
-                != entityReplayStateEntry.getValue().rtFlag()) {
-                return false;
-            }
-        }
-
-        applyReplayPositions(worldEntityReplayCache.entityRenderDataList, entityReplayStates);
-        queueBuildWithoutClose(worldEntityReplayCache.entityRenderDataList);
-        return true;
-    }
-
-    private static boolean tryReplayBlockEntities(BlockEntityUpdateBucket bucket,
-        Map<Integer, BlockEntityReplayState> blockEntityReplayStates,
-        int entityUpdateInterval,
-        EntityRenderDataList entityRenderDataList,
-        EntityRenderDataList crumblingRenderDataList) {
-        BlockEntityReplayCache blockEntityReplayCache = blockEntityReplayCaches.get(bucket);
-        if (blockEntityReplayCache == null || blockEntityReplayStates.isEmpty()) {
-            return false;
-        }
-        if (!canReplayThisFrame(blockEntityReplayFrameCounter, entityUpdateInterval)) {
-            return false;
-        }
-        if (blockEntityReplayCache.renderStates.size() != blockEntityReplayStates.size()) {
-            return false;
-        }
-
-        for (Map.Entry<Integer, BlockEntityReplayState> blockEntityReplayStateEntry : blockEntityReplayStates.entrySet()) {
-            BlockEntityReplayState cachedBlockEntityReplayState = blockEntityReplayCache.renderStates.get(
-                blockEntityReplayStateEntry.getKey());
-            if (cachedBlockEntityReplayState == null || cachedBlockEntityReplayState.signature()
-                != blockEntityReplayStateEntry.getValue().signature()) {
-                return false;
-            }
-        }
-
-        applyReplayPositions(blockEntityReplayCache.entityRenderDataList, blockEntityReplayStates);
-        applyReplayPositions(blockEntityReplayCache.crumblingRenderDataList,
-            blockEntityReplayStates);
-        entityRenderDataList.addAll(blockEntityReplayCache.entityRenderDataList);
-        crumblingRenderDataList.addAll(blockEntityReplayCache.crumblingRenderDataList);
-        return true;
-    }
-
-    private static boolean tryReplayParticles(ParticleUpdateBucket bucket,
-        ParticleReplayState particleReplayState,
-        int entityUpdateInterval,
-        EntityRenderDataList entityRenderDataList) {
-        ParticleReplayCache particleReplayCache = particleReplayCaches.get(bucket);
-        if (particleReplayCache == null || particleReplayState.totalParticleCount() == 0) {
-            return false;
-        }
-        if (!canReplayThisFrame(particleReplayFrameCounter, entityUpdateInterval)) {
-            return false;
-        }
-        if (!particleReplayCache.particleReplayState.equals(particleReplayState)) {
-            return false;
-        }
-
-        entityRenderDataList.addAll(particleReplayCache.entityRenderDataList);
-        return true;
-    }
-
-    private static EntityReplayCache createEntityReplayCache(EntityRenderDataList entityRenderDataList,
-        Map<Integer, EntityReplayState> entityReplayStates) {
-        List<BuiltBuffer> ownedBuffers = new ArrayList<>();
-        EntityRenderDataList clonedRenderDataList = cloneEntityRenderDataList(entityRenderDataList,
-            ownedBuffers);
-        return new EntityReplayCache(clonedRenderDataList, new HashMap<>(entityReplayStates),
-            ownedBuffers);
-    }
-
-    private static void replaceWorldEntityReplayCache(EntityReplayCache entityReplayCache) {
-        clearWorldEntityReplayCache();
-        worldEntityReplayCache = entityReplayCache;
-    }
-
-    private static BlockEntityReplayCache createBlockEntityReplayCache(
-        EntityRenderDataList entityRenderDataList,
-        EntityRenderDataList crumblingRenderDataList,
-        Map<Integer, BlockEntityReplayState> blockEntityReplayStates) {
-        List<BuiltBuffer> ownedBuffers = new ArrayList<>();
-        EntityRenderDataList clonedEntityRenderDataList = cloneEntityRenderDataList(
-            entityRenderDataList, ownedBuffers);
-        EntityRenderDataList clonedCrumblingRenderDataList = cloneEntityRenderDataList(
-            crumblingRenderDataList, ownedBuffers);
-        return new BlockEntityReplayCache(clonedEntityRenderDataList,
-            clonedCrumblingRenderDataList, new LinkedHashMap<>(blockEntityReplayStates),
-            ownedBuffers);
-    }
-
-    private static void replaceBlockEntityReplayCache(BlockEntityUpdateBucket bucket,
-        BlockEntityReplayCache newBlockEntityReplayCache) {
-        clearBlockEntityReplayCache(bucket);
-        blockEntityReplayCaches.put(bucket, newBlockEntityReplayCache);
-    }
-
-    private static ParticleReplayCache createParticleReplayCache(
-        EntityRenderDataList entityRenderDataList,
-        ParticleReplayState particleReplayState) {
-        List<BuiltBuffer> ownedBuffers = new ArrayList<>();
-        EntityRenderDataList clonedRenderDataList = cloneEntityRenderDataList(entityRenderDataList,
-            ownedBuffers);
-        return new ParticleReplayCache(clonedRenderDataList, particleReplayState, ownedBuffers);
-    }
-
-    private static void replaceParticleReplayCache(ParticleUpdateBucket bucket,
-        ParticleReplayCache newParticleReplayCache) {
-        clearParticleReplayCache(bucket);
-        particleReplayCaches.put(bucket, newParticleReplayCache);
-    }
-
-    private static EntityRenderDataList cloneEntityRenderDataList(
-        EntityRenderDataList sourceEntityRenderDataList,
-        List<BuiltBuffer> ownedBuffers) {
-        EntityRenderDataList clonedRenderDataList = new EntityRenderDataList();
-        for (EntityRenderData entityRenderData : sourceEntityRenderDataList) {
-            EntityRenderData clonedRenderData = new EntityRenderData(entityRenderData.hashCode,
-                entityRenderData.x, entityRenderData.y, entityRenderData.z,
-                entityRenderData.rtFlag, entityRenderData.prebuiltBLAS, entityRenderData.post);
-            for (EntityRenderLayer entityRenderLayer : entityRenderData) {
-                BuiltBuffer clonedBuiltBuffer = cloneBuiltBuffer(entityRenderLayer.builtBuffer);
-                ownedBuffers.add(clonedBuiltBuffer);
-                clonedRenderData.add(new EntityRenderLayer(entityRenderLayer.renderLayer,
-                    clonedBuiltBuffer, entityRenderLayer.reflect));
-            }
-            clonedRenderDataList.add(clonedRenderData);
-        }
-        return clonedRenderDataList;
-    }
-
-    private static EntityRenderDataList sliceEntityRenderDataList(
-        EntityRenderDataList sourceEntityRenderDataList,
-        int fromIndex) {
-        EntityRenderDataList slicedRenderDataList = new EntityRenderDataList();
-        for (int i = fromIndex; i < sourceEntityRenderDataList.size(); i++) {
-            slicedRenderDataList.add(sourceEntityRenderDataList.get(i));
-        }
-        return slicedRenderDataList;
-    }
-
-    private static boolean canReplayThisFrame(long frameCounter, int entityUpdateInterval) {
-        return entityUpdateInterval > 1
-            && Math.floorMod(frameCounter - 1L, entityUpdateInterval) != 0L;
-    }
-
-    private static void applyReplayPositions(EntityRenderDataList entityRenderDataList,
-        Map<Integer, ? extends PositionedReplayState> replayStates) {
-        for (EntityRenderData entityRenderData : entityRenderDataList) {
-            PositionedReplayState replayState = replayStates.get(entityRenderData.hashCode);
-            if (replayState == null) {
-                continue;
-            }
-            entityRenderData.setX(replayState.x());
-            entityRenderData.setY(replayState.y());
-            entityRenderData.setZ(replayState.z());
-        }
-    }
-
-    private static int blockEntityRenderId(BlockEntity blockEntity, boolean crumbling) {
-        return System.identityHashCode(blockEntity) * 31 + (crumbling ? 1 : 0);
-    }
-
-    private static long mixReplaySignature(long signature, int value) {
-        long mixedSignature = signature ^ Integer.toUnsignedLong(value);
-        return mixedSignature * 0x100000001b3L;
-    }
-
-    private static BuiltBuffer cloneBuiltBuffer(BuiltBuffer builtBuffer) {
-        ByteBuffer sourceSlice = builtBuffer.getBuffer().slice();
-        BufferAllocator bufferAllocator = new BufferAllocator(sourceSlice.remaining());
-        long targetAddress = bufferAllocator.allocate(sourceSlice.remaining());
-        MemoryUtil.memCopy(memAddress(sourceSlice), targetAddress, sourceSlice.remaining());
-
-        BufferAllocator.CloseableBuffer closeableBuffer = bufferAllocator.getAllocated();
-        if (closeableBuffer == null) {
-            bufferAllocator.close();
-            throw new IllegalStateException("Failed to clone built buffer");
-        }
-
-        BuiltBuffer.DrawParameters drawParameters = builtBuffer.getDrawParameters();
-        return new BuiltBuffer(closeableBuffer,
-            new BuiltBuffer.DrawParameters(
-                drawParameters.format(),
-                drawParameters.vertexCount(),
-                drawParameters.indexCount(),
-                drawParameters.mode(),
-                drawParameters.indexType()));
-    }
-
     public static void queueBuild(
         List<StorageVertexConsumerProvider> storageVertexConsumerProviders,
         EntityRenderDataList entityRenderDataList) {
@@ -1375,17 +748,208 @@ public class EntityProxy {
             return;
         }
 
-        dispatchBuild(entityRenderDataList, lineWidth, coordinate, normalOffset);
+        TextureManager
+            textureManager =
+            MinecraftClient.getInstance()
+                .getTextureManager();
 
-        for (EntityRenderData entityRenderData : entityRenderDataList) {
-            for (EntityRenderLayer entityRenderLayer : entityRenderData) {
-                BuiltBuffer vertexBuffer = entityRenderLayer.builtBuffer;
-                vertexBuffer.close();
+        ByteBuffer entityHashCodeBB = null;
+        ByteBuffer entityPosXBB = null;
+        ByteBuffer entityPosYBB = null;
+        ByteBuffer entityPosZBB = null;
+        ByteBuffer entityRTFlagBB = null;
+        ByteBuffer entityPrebuiltBLASBB = null;
+        ByteBuffer entityPostBB = null;
+        ByteBuffer entityLayerCountBB = null;
+        ByteBuffer geometryTypeBB = null;
+        ByteBuffer geometryTextureBB = null;
+        ByteBuffer vertexFormatBB = null;
+        ByteBuffer indexFormatBB = null;
+        ByteBuffer vertexCountBB = null;
+        ByteBuffer verticesBB = null;
+
+        try {
+            int entityHashCodeSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+            entityHashCodeBB = MemoryUtil.memAlloc(entityHashCodeSize);
+            long entityHashCodeAddr = memAddress(entityHashCodeBB);
+            int entityHashCodeBaseAddr = 0;
+
+            int entityPosXSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+            entityPosXBB = MemoryUtil.memAlloc(entityPosXSize);
+            long entityPosXAddr = memAddress(entityPosXBB);
+            int entityPosXBaseAddr = 0;
+
+            int entityPosYSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+            entityPosYBB = MemoryUtil.memAlloc(entityPosYSize);
+            long entityPosYAddr = memAddress(entityPosYBB);
+            int entityPosYBaseAddr = 0;
+
+            int entityPosZSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+            entityPosZBB = MemoryUtil.memAlloc(entityPosZSize);
+            long entityPosZAddr = memAddress(entityPosZBB);
+            int entityPosZBaseAddr = 0;
+
+            int entityRTFlagSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+            entityRTFlagBB = MemoryUtil.memAlloc(entityRTFlagSize);
+            long entityRTFlagAddr = memAddress(entityRTFlagBB);
+            int entityRTFlagBaseAddr = 0;
+
+            int entityPrebuiltBLASSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+            entityPrebuiltBLASBB = MemoryUtil.memAlloc(entityPrebuiltBLASSize);
+            long entityPrebuiltBLASAddr = memAddress(entityPrebuiltBLASBB);
+            int entityPrebuiltBLASBaseAddr = 0;
+
+            int entityPostSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+            entityPostBB = MemoryUtil.memAlloc(entityPostSize);
+            long entityPostAddr = memAddress(entityPostBB);
+            int entityPostBaseAddr = 0;
+
+            int entityLayerCountSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+            entityLayerCountBB = MemoryUtil.memAlloc(entityLayerCountSize);
+            long entityLayerCountAddr = memAddress(entityLayerCountBB);
+            int entityLayerCountBaseAddr = 0;
+
+            int geometryTypeSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+            geometryTypeBB = MemoryUtil.memAlloc(geometryTypeSize);
+            long geometryTypeAddr = memAddress(geometryTypeBB);
+            int geometryTypeBaseAddr = 0;
+
+            int geometryTextureSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+            geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
+            long geometryTextureAddr = memAddress(geometryTextureBB);
+            int geometryTextureBaseAddr = 0;
+
+            int vertexFormatSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+            vertexFormatBB = MemoryUtil.memAlloc(vertexFormatSize);
+            long vertexFormatAddr = memAddress(vertexFormatBB);
+            int vertexFormatBaseAddr = 0;
+
+            int indexFormatSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+            indexFormatBB = MemoryUtil.memAlloc(indexFormatSize);
+            long indexFormatAddr = memAddress(indexFormatBB);
+            int indexFormatBaseAddr = 0;
+
+            int vertexCountSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+            vertexCountBB = MemoryUtil.memAlloc(vertexCountSize);
+            long vertexCountAddr = memAddress(vertexCountBB);
+            int vertexCountBaseAddr = 0;
+
+            int verticesSize = entityRenderDataList.getTotalLayersCount() * Long.BYTES;
+            verticesBB = MemoryUtil.memAlloc(verticesSize);
+            long verticesAddr = memAddress(verticesBB);
+            int verticesBaseAddr = 0;
+
+            for (EntityRenderData entityRenderData : entityRenderDataList) {
+                entityHashCodeBB.putInt(entityHashCodeBaseAddr, entityRenderData.hashCode);
+                entityHashCodeBaseAddr += Integer.BYTES;
+
+                entityPosXBB.putDouble(entityPosXBaseAddr, entityRenderData.x);
+                entityPosXBaseAddr += Double.BYTES;
+
+                entityPosYBB.putDouble(entityPosYBaseAddr, entityRenderData.y);
+                entityPosYBaseAddr += Double.BYTES;
+
+                entityPosZBB.putDouble(entityPosZBaseAddr, entityRenderData.z);
+                entityPosZBaseAddr += Double.BYTES;
+
+                entityRTFlagBB.putInt(entityRTFlagBaseAddr, entityRenderData.rtFlag);
+                entityRTFlagBaseAddr += Integer.BYTES;
+
+                entityPrebuiltBLASBB.putInt(entityPrebuiltBLASBaseAddr, entityRenderData.prebuiltBLAS);
+                entityPrebuiltBLASBaseAddr += Integer.BYTES;
+
+                entityPostBB.putInt(entityPostBaseAddr, entityRenderData.post ? 1 : 0);
+                entityPostBaseAddr += Integer.BYTES;
+
+                entityLayerCountBB.putInt(entityLayerCountBaseAddr, entityRenderData.size());
+                entityLayerCountBaseAddr += Integer.BYTES;
+
+                for (EntityRenderLayer entityRenderLayer : entityRenderData) {
+                    RenderLayer renderLayer = entityRenderLayer.renderLayer;
+                    BuiltBuffer vertexBuffer = entityRenderLayer.builtBuffer;
+
+                    Identifier identifier = ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
+                        .orElse(MissingSprite.getMissingSpriteId());
+                    int geometryTypeID = Constants.GeometryTypes.getGeometryType(renderLayer, entityRenderLayer.reflect)
+                        .getValue();
+                    int geometryTextureID = textureManager.getTexture(identifier).getGlId();
+                    int vertexFormatID = Constants.VertexFormats.getValue(vertexBuffer.getDrawParameters().format());
+                    int indexFormatID = Constants.DrawModes.getValue(vertexBuffer.getDrawParameters().mode());
+
+                    BufferProxy.BufferInfo vertexBufferInfo = BufferProxy.getBufferInfo(vertexBuffer.getBuffer());
+                    assert vertexBuffer.getDrawParameters().indexCount() == vertexBuffer.getDrawParameters().vertexCount() / 4 * 6;
+
+                    geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
+                    geometryTypeBaseAddr += Integer.BYTES;
+
+                    geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
+                    geometryTextureBaseAddr += Integer.BYTES;
+
+                    vertexFormatBB.putInt(vertexFormatBaseAddr, vertexFormatID);
+                    vertexFormatBaseAddr += Integer.BYTES;
+
+                    indexFormatBB.putInt(indexFormatBaseAddr, indexFormatID);
+                    indexFormatBaseAddr += Integer.BYTES;
+
+                    vertexCountBB.putInt(vertexCountBaseAddr, vertexBuffer.getDrawParameters().vertexCount());
+                    vertexCountBaseAddr += Integer.BYTES;
+
+                    verticesBB.putLong(verticesBaseAddr, vertexBufferInfo.addr());
+                    verticesBaseAddr += Long.BYTES;
+                }
             }
-        }
 
-        for (StorageVertexConsumerProvider storageVertexConsumerProvider : storageVertexConsumerProviders) {
-            storageVertexConsumerProvider.close();
+            queueBuild(lineWidth,
+                coordinate.getValue(),
+                normalOffset,
+                entityRenderDataList.getTotalEntityCount(),
+                entityHashCodeAddr,
+                entityPosXAddr,
+                entityPosYAddr,
+                entityPosZAddr,
+                entityRTFlagAddr,
+                entityPrebuiltBLASAddr,
+                entityPostAddr,
+                entityLayerCountAddr,
+                geometryTypeAddr,
+                geometryTextureAddr,
+                vertexFormatAddr,
+                indexFormatAddr,
+                vertexCountAddr,
+                verticesAddr);
+        } finally {
+            if (entityHashCodeBB != null) MemoryUtil.memFree(entityHashCodeBB);
+            if (entityPosXBB != null) MemoryUtil.memFree(entityPosXBB);
+            if (entityPosYBB != null) MemoryUtil.memFree(entityPosYBB);
+            if (entityPosZBB != null) MemoryUtil.memFree(entityPosZBB);
+            if (entityRTFlagBB != null) MemoryUtil.memFree(entityRTFlagBB);
+            if (entityPrebuiltBLASBB != null) MemoryUtil.memFree(entityPrebuiltBLASBB);
+            if (entityPostBB != null) MemoryUtil.memFree(entityPostBB);
+            if (entityLayerCountBB != null) MemoryUtil.memFree(entityLayerCountBB);
+            if (geometryTypeBB != null) MemoryUtil.memFree(geometryTypeBB);
+            if (geometryTextureBB != null) MemoryUtil.memFree(geometryTextureBB);
+            if (vertexFormatBB != null) MemoryUtil.memFree(vertexFormatBB);
+            if (indexFormatBB != null) MemoryUtil.memFree(indexFormatBB);
+            if (vertexCountBB != null) MemoryUtil.memFree(vertexCountBB);
+            if (verticesBB != null) MemoryUtil.memFree(verticesBB);
+
+            // Close built buffers and providers (original behavior), but don't let cleanup mask errors.
+            try {
+                for (EntityRenderData entityRenderData : entityRenderDataList) {
+                    for (EntityRenderLayer entityRenderLayer : entityRenderData) {
+                        BuiltBuffer vertexBuffer = entityRenderLayer.builtBuffer;
+                        vertexBuffer.close();
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+
+            try {
+                for (StorageVertexConsumerProvider storageVertexConsumerProvider : storageVertexConsumerProviders) {
+                    storageVertexConsumerProvider.close();
+                }
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -1397,82 +961,79 @@ public class EntityProxy {
         float lineWidth,
         Constants.Coordinates coordinate,
         boolean normalOffset) {
-        if (entityRenderDataList.isEmpty()) {
-            return;
-        }
+        TextureManager
+            textureManager =
+            MinecraftClient.getInstance()
+                .getTextureManager();
 
-        dispatchBuild(entityRenderDataList, lineWidth, coordinate, normalOffset);
-    }
-
-    private static void dispatchBuild(EntityRenderDataList entityRenderDataList,
-        float lineWidth,
-        Constants.Coordinates coordinate,
-        boolean normalOffset) {
-        BuildSubmissionData submission = prepareBuildSubmission(entityRenderDataList,
-            MinecraftClient.getInstance().getTextureManager());
-
-        queueBuild(lineWidth,
-            coordinate.getValue(),
-            normalOffset,
-            submission.entityCount(),
-            submission.entityHashCodes(),
-            submission.entityPosXs(),
-            submission.entityPosYs(),
-            submission.entityPosZs(),
-            submission.entityRTFlags(),
-            submission.entityPrebuiltBLASs(),
-            submission.entityPosts(),
-            submission.entityLayerCounts(),
-            submission.geometryTypes(),
-            submission.geometryGroupNames(),
-            submission.geometryTextures(),
-            submission.vertexFormats(),
-            submission.indexFormats(),
-            submission.vertexCounts(),
-            submission.vertices());
-    }
-
-    private static BuildSubmissionData prepareBuildSubmission(EntityRenderDataList entityRenderDataList,
-        TextureManager textureManager) {
-        int entityCount = entityRenderDataList.getTotalEntityCount();
-        int layerCount = entityRenderDataList.getTotalLayersCount();
-        BuildScratch scratch = BUILD_SCRATCH.get();
-
-        ByteBuffer entityHashCodeBB = scratch.acquire("entityHashCodes",
-            entityCount * Integer.BYTES);
-        ByteBuffer entityPosXBB = scratch.acquire("entityPosXs", entityCount * Double.BYTES);
-        ByteBuffer entityPosYBB = scratch.acquire("entityPosYs", entityCount * Double.BYTES);
-        ByteBuffer entityPosZBB = scratch.acquire("entityPosZs", entityCount * Double.BYTES);
-        ByteBuffer entityRTFlagBB = scratch.acquire("entityRTFlags", entityCount * Integer.BYTES);
-        ByteBuffer entityPrebuiltBLASBB = scratch.acquire("entityPrebuiltBLASs",
-            entityCount * Integer.BYTES);
-        ByteBuffer entityPostBB = scratch.acquire("entityPosts", entityCount * Integer.BYTES);
-        ByteBuffer entityLayerCountBB = scratch.acquire("entityLayerCounts",
-            entityCount * Integer.BYTES);
-        ByteBuffer geometryTypeBB = scratch.acquire("geometryTypes", layerCount * Integer.BYTES);
-        ByteBuffer geometryGroupNameBB = scratch.acquire("geometryGroupNames",
-            layerCount * Long.BYTES);
-        ByteBuffer geometryTextureBB = scratch.acquire("geometryTextures",
-            layerCount * Integer.BYTES);
-        ByteBuffer vertexFormatBB = scratch.acquire("vertexFormats", layerCount * Integer.BYTES);
-        ByteBuffer indexFormatBB = scratch.acquire("indexFormats", layerCount * Integer.BYTES);
-        ByteBuffer vertexCountBB = scratch.acquire("vertexCounts", layerCount * Integer.BYTES);
-        ByteBuffer verticesBB = scratch.acquire("vertices", layerCount * Long.BYTES);
-
+        int entityHashCodeSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+        ByteBuffer entityHashCodeBB = MemoryUtil.memAlloc(entityHashCodeSize);
+        long entityHashCodeAddr = memAddress(entityHashCodeBB);
         int entityHashCodeBaseAddr = 0;
+
+        int entityPosXSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+        ByteBuffer entityPosXBB = MemoryUtil.memAlloc(entityPosXSize);
+        long entityPosXAddr = memAddress(entityPosXBB);
         int entityPosXBaseAddr = 0;
+
+        int entityPosYSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+        ByteBuffer entityPosYBB = MemoryUtil.memAlloc(entityPosYSize);
+        long entityPosYAddr = memAddress(entityPosYBB);
         int entityPosYBaseAddr = 0;
+
+        int entityPosZSize = entityRenderDataList.getTotalEntityCount() * Double.BYTES;
+        ByteBuffer entityPosZBB = MemoryUtil.memAlloc(entityPosZSize);
+        long entityPosZAddr = memAddress(entityPosZBB);
         int entityPosZBaseAddr = 0;
+
+        int entityRTFlagSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+        ByteBuffer entityRTFlagBB = MemoryUtil.memAlloc(entityRTFlagSize);
+        long entityRTFlagAddr = memAddress(entityRTFlagBB);
         int entityRTFlagBaseAddr = 0;
+
+        int entityPrebuiltBLASSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+        ByteBuffer entityPrebuiltBLASBB = MemoryUtil.memAlloc(entityPrebuiltBLASSize);
+        long entityPrebuiltBLASAddr = memAddress(entityPrebuiltBLASBB);
         int entityPrebuiltBLASBaseAddr = 0;
+
+        int entityPostSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+        ByteBuffer entityPostBB = MemoryUtil.memAlloc(entityPostSize);
+        long entityPostAddr = memAddress(entityPostBB);
         int entityPostBaseAddr = 0;
+
+        int entityLayerCountSize = entityRenderDataList.getTotalEntityCount() * Integer.BYTES;
+        ByteBuffer entityLayerCountBB = MemoryUtil.memAlloc(entityLayerCountSize);
+        long entityLayerCountAddr = memAddress(entityLayerCountBB);
         int entityLayerCountBaseAddr = 0;
+
+        int geometryTypeSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+        ByteBuffer geometryTypeBB = MemoryUtil.memAlloc(geometryTypeSize);
+        long geometryTypeAddr = memAddress(geometryTypeBB);
         int geometryTypeBaseAddr = 0;
-        int geometryGroupNameBaseAddr = 0;
+
+        int geometryTextureSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+        ByteBuffer geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
+        long geometryTextureAddr = memAddress(geometryTextureBB);
         int geometryTextureBaseAddr = 0;
+
+        int vertexFormatSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+        ByteBuffer vertexFormatBB = MemoryUtil.memAlloc(vertexFormatSize);
+        long vertexFormatAddr = memAddress(vertexFormatBB);
         int vertexFormatBaseAddr = 0;
+
+        int indexFormatSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+        ByteBuffer indexFormatBB = MemoryUtil.memAlloc(indexFormatSize);
+        long indexFormatAddr = memAddress(indexFormatBB);
         int indexFormatBaseAddr = 0;
+
+        int vertexCountSize = entityRenderDataList.getTotalLayersCount() * Integer.BYTES;
+        ByteBuffer vertexCountBB = MemoryUtil.memAlloc(vertexCountSize);
+        long vertexCountAddr = memAddress(vertexCountBB);
         int vertexCountBaseAddr = 0;
+
+        int verticesSize = entityRenderDataList.getTotalLayersCount() * Long.BYTES;
+        ByteBuffer verticesBB = MemoryUtil.memAlloc(verticesSize);
+        long verticesAddr = memAddress(verticesBB);
         int verticesBaseAddr = 0;
 
         for (EntityRenderData entityRenderData : entityRenderDataList) {
@@ -1504,26 +1065,35 @@ public class EntityProxy {
                 RenderLayer renderLayer = entityRenderLayer.renderLayer;
                 BuiltBuffer vertexBuffer = entityRenderLayer.builtBuffer;
 
-                int geometryTypeID = Constants.GeometryTypes.getGeometryType(renderLayer,
-                    entityRenderLayer.reflect).getValue();
-                int geometryTextureID = TextureTracker.getRenderLayerTextureGlId(renderLayer,
-                    textureManager, MissingSprite.getMissingSpriteId());
-                int vertexFormatID = Constants.VertexFormats.getValue(
-                    vertexBuffer.getDrawParameters().format());
-                int indexFormatID = Constants.DrawModes.getValue(
-                    vertexBuffer.getDrawParameters().mode());
+                Identifier
+                    identifier =
+                    ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
+                        .orElse(MissingSprite.getMissingSpriteId());
+                int
+                    geometryTypeID =
+                    Constants.GeometryTypes.getGeometryType(renderLayer, entityRenderLayer.reflect)
+                        .getValue();
+                int
+                    geometryTextureID =
+                    textureManager.getTexture(identifier)
+                        .getGlId();
+                int
+                    vertexFormatID =
+                    Constants.VertexFormats.getValue(vertexBuffer.getDrawParameters()
+                        .format());
+                int
+                    indexFormatID =
+                    Constants.DrawModes.getValue(vertexBuffer.getDrawParameters()
+                        .mode());
 
                 BufferProxy.BufferInfo vertexBufferInfo = BufferProxy.getBufferInfo(
                     vertexBuffer.getBuffer());
-                assert vertexBuffer.getDrawParameters().indexCount()
-                    == vertexBuffer.getDrawParameters().vertexCount() / 4 * 6;
+                assert vertexBuffer.getDrawParameters()
+                    .indexCount() == vertexBuffer.getDrawParameters()
+                    .vertexCount() / 4 * 6;
 
                 geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
                 geometryTypeBaseAddr += Integer.BYTES;
-
-                geometryGroupNameBB.putLong(geometryGroupNameBaseAddr, memAddress(
-                    cachedGeometryGroupName(renderLayer.name)));
-                geometryGroupNameBaseAddr += Long.BYTES;
 
                 geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
                 geometryTextureBaseAddr += Integer.BYTES;
@@ -1535,7 +1105,8 @@ public class EntityProxy {
                 indexFormatBaseAddr += Integer.BYTES;
 
                 vertexCountBB.putInt(vertexCountBaseAddr,
-                    vertexBuffer.getDrawParameters().vertexCount());
+                    vertexBuffer.getDrawParameters()
+                        .vertexCount());
                 vertexCountBaseAddr += Integer.BYTES;
 
                 verticesBB.putLong(verticesBaseAddr, vertexBufferInfo.addr());
@@ -1543,65 +1114,40 @@ public class EntityProxy {
             }
         }
 
-        return new BuildSubmissionData(entityCount,
-            memAddress(entityHashCodeBB),
-            memAddress(entityPosXBB),
-            memAddress(entityPosYBB),
-            memAddress(entityPosZBB),
-            memAddress(entityRTFlagBB),
-            memAddress(entityPrebuiltBLASBB),
-            memAddress(entityPostBB),
-            memAddress(entityLayerCountBB),
-            memAddress(geometryTypeBB),
-            memAddress(geometryGroupNameBB),
-            memAddress(geometryTextureBB),
-            memAddress(vertexFormatBB),
-            memAddress(indexFormatBB),
-            memAddress(vertexCountBB),
-            memAddress(verticesBB));
-    }
+        queueBuild(lineWidth,
+            coordinate.getValue(),
+            normalOffset,
+            entityRenderDataList.getTotalEntityCount(),
+            entityHashCodeAddr,
+            entityPosXAddr,
+            entityPosYAddr,
+            entityPosZAddr,
+            entityRTFlagAddr,
+            entityPrebuiltBLASAddr,
+            entityPostAddr,
+            entityLayerCountAddr,
+            geometryTypeAddr,
+            geometryTextureAddr,
+            vertexFormatAddr,
+            indexFormatAddr,
+            vertexCountAddr,
+            verticesAddr);
 
-    private static ByteBuffer cachedGeometryGroupName(String groupName) {
-        return GEOMETRY_GROUP_NAME_CACHE.computeIfAbsent(groupName,
-            key -> MemoryUtil.memUTF8(key, true));
-    }
-
-    private record BuildSubmissionData(int entityCount, long entityHashCodes, long entityPosXs,
-                                       long entityPosYs, long entityPosZs, long entityRTFlags,
-                                       long entityPrebuiltBLASs, long entityPosts,
-                                       long entityLayerCounts, long geometryTypes,
-                                       long geometryGroupNames, long geometryTextures,
-                                       long vertexFormats, long indexFormats, long vertexCounts,
-                                       long vertices) {
-
-    }
-
-    private static final class BuildScratch {
-
-        private final Map<String, ByteBuffer> buffers = new HashMap<>();
-
-        private ByteBuffer acquire(String key, int requiredBytes) {
-            int minCapacity = Math.max(1, requiredBytes);
-            ByteBuffer buffer = buffers.get(key);
-            if (buffer == null || buffer.capacity() < minCapacity) {
-                if (buffer != null) {
-                    MemoryUtil.memFree(buffer);
-                }
-                buffer = MemoryUtil.memAlloc(nextCapacity(minCapacity));
-                buffers.put(key, buffer);
-            }
-            buffer.clear();
-            buffer.limit(requiredBytes);
-            return buffer;
-        }
-
-        private int nextCapacity(int requiredBytes) {
-            int capacity = 256;
-            while (capacity < requiredBytes && capacity > 0) {
-                capacity <<= 1;
-            }
-            return capacity > 0 ? capacity : requiredBytes;
-        }
+        // free
+        MemoryUtil.memFree(entityHashCodeBB);
+        MemoryUtil.memFree(entityPosXBB);
+        MemoryUtil.memFree(entityPosYBB);
+        MemoryUtil.memFree(entityPosZBB);
+        MemoryUtil.memFree(entityRTFlagBB);
+        MemoryUtil.memFree(entityPrebuiltBLASBB);
+        MemoryUtil.memFree(entityPostBB);
+        MemoryUtil.memFree(entityLayerCountBB);
+        MemoryUtil.memFree(geometryTypeBB);
+        MemoryUtil.memFree(geometryTextureBB);
+        MemoryUtil.memFree(vertexFormatBB);
+        MemoryUtil.memFree(indexFormatBB);
+        MemoryUtil.memFree(vertexCountBB);
+        MemoryUtil.memFree(verticesBB);
     }
 
     private static native void queueBuild(float lineWidth,
@@ -1617,7 +1163,6 @@ public class EntityProxy {
         long entityPosts,
         long entityLayerCounts,
         long geometryTypes,
-        long geometryGroupNames,
         long geometryTextures,
         long vertexFormats,
         long indexFormats,
@@ -1712,258 +1257,12 @@ public class EntityProxy {
             return super.add(entityRenderData);
         }
 
-        @Override
-        public boolean addAll(java.util.Collection<? extends EntityRenderData> entityRenderDataCollection) {
-            int addedLayersCount = 0;
-            for (EntityRenderData entityRenderData : entityRenderDataCollection) {
-                addedLayersCount += entityRenderData.size();
-            }
-            boolean changed = super.addAll(entityRenderDataCollection);
-            if (changed) {
-                totalLayersCount += addedLayersCount;
-            }
-            return changed;
-        }
-
         public int getTotalLayersCount() {
             return totalLayersCount;
         }
 
         public int getTotalEntityCount() {
             return this.size();
-        }
-    }
-
-    private interface PositionedReplayState {
-
-        double x();
-
-        double y();
-
-        double z();
-    }
-
-    private record EntityReplayState(double x, double y, double z, float tickDelta,
-                                     int rtFlag) implements PositionedReplayState {
-
-    }
-
-    private record BlockEntityReplayState(double x, double y, double z,
-                                          int signature) implements PositionedReplayState {
-
-    }
-
-    private static final class ParticleVertexConsumerProvider implements VertexConsumerProvider {
-
-        private final StorageVertexConsumerProvider delegate;
-        private final float emissionStrength;
-        private final Map<RenderLayer, VertexConsumer> wrappedConsumers = new HashMap<>();
-
-        private ParticleVertexConsumerProvider(StorageVertexConsumerProvider delegate,
-            Particle particle) {
-            this.delegate = delegate;
-            this.emissionStrength = particleEmissionStrength(particle);
-        }
-
-        @Override
-        public VertexConsumer getBuffer(RenderLayer renderLayer) {
-            VertexConsumer vertexConsumer = delegate.getBuffer(renderLayer);
-            if (!(vertexConsumer instanceof PBRVertexConsumer pbrVertexConsumer)) {
-                return vertexConsumer;
-            }
-            pbrVertexConsumer.materialHints(PBRVertexConsumer.MATERIAL_HINT_FORCE_NO_PBR);
-            if (emissionStrength <= 0.0f) {
-                return pbrVertexConsumer;
-            }
-            return wrappedConsumers.computeIfAbsent(renderLayer,
-                unused -> new ParticleGlowVertexConsumer(pbrVertexConsumer, renderLayer,
-                    emissionStrength));
-        }
-    }
-
-    private static final class ParticleGlowVertexConsumer implements VertexConsumer {
-
-        private final PBRVertexConsumer delegate;
-        private final float emissionStrength;
-        private final float layerEmissionMultiplier;
-        private int red = 255;
-        private int green = 255;
-        private int blue = 255;
-        private int alpha = 255;
-        private int lightU = 240;
-        private int lightV = 240;
-
-        private ParticleGlowVertexConsumer(PBRVertexConsumer delegate, RenderLayer renderLayer,
-            float emissionStrength) {
-            this.delegate = delegate;
-            this.emissionStrength = emissionStrength;
-            String layerName = renderLayer.name.toLowerCase(Locale.ROOT);
-            if (layerName.contains("lit")) {
-                this.layerEmissionMultiplier = 1.35f;
-            } else if (layerName.contains("particle")) {
-                this.layerEmissionMultiplier = 1.0f;
-            } else {
-                this.layerEmissionMultiplier = 0.8f;
-            }
-        }
-
-        @Override
-        public VertexConsumer vertex(float x, float y, float z) {
-            red = 255;
-            green = 255;
-            blue = 255;
-            alpha = 255;
-            lightU = 240;
-            lightV = 240;
-            delegate.vertex(x, y, z);
-            applyEmission();
-            return this;
-        }
-
-        @Override
-        public VertexConsumer color(int red, int green, int blue, int alpha) {
-            this.red = red;
-            this.green = green;
-            this.blue = blue;
-            this.alpha = alpha;
-            delegate.color(red, green, blue, alpha);
-            applyEmission();
-            return this;
-        }
-
-        @Override
-        public VertexConsumer texture(float u, float v) {
-            delegate.texture(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer overlay(int u, int v) {
-            delegate.overlay(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer light(int u, int v) {
-            this.lightU = u;
-            this.lightV = v;
-            delegate.light(u, v);
-            applyEmission();
-            return this;
-        }
-
-        @Override
-        public VertexConsumer normal(float x, float y, float z) {
-            delegate.normal(x, y, z);
-            return this;
-        }
-
-        private void applyEmission() {
-            float alphaFactor = alpha / 255.0f;
-            float maxChannel = Math.max(red, Math.max(green, blue)) / 255.0f;
-            float lightFactor = MathHelper.clamp(Math.max(lightU, lightV) / 240.0f, 0.0f, 1.0f);
-            float emission = emissionStrength * layerEmissionMultiplier * alphaFactor
-                * Math.max(0.2f, maxChannel) * (0.45f + 0.55f * lightFactor);
-            delegate.albedoEmission(emission);
-        }
-    }
-
-    private record ParticleReplayState(int totalParticleCount, int customParticleCount,
-                                       long signature) {
-
-    }
-
-    private record BlockEntityRenderEntry(BlockEntity blockEntity, int crumblingStage,
-                                          int mainRenderId, int crumblingRenderId) {
-
-    }
-
-    private record BlockEntityBuildBatch(
-        List<StorageVertexConsumerProvider> entityStorageVertexConsumerProviders,
-        EntityRenderDataList entityRenderDataList,
-        List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders,
-        EntityRenderDataList crumblingRenderDataList) {
-
-    }
-
-    public record BlockEntityQueueResult(
-        List<StorageVertexConsumerProvider> freshCrumblingStorageVertexConsumerProviders,
-        EntityRenderDataList freshCrumblingRenderDataList,
-        EntityRenderDataList replayedCrumblingRenderDataList) {
-
-        public boolean isEmpty() {
-            return freshCrumblingRenderDataList.isEmpty() && replayedCrumblingRenderDataList.isEmpty();
-        }
-    }
-
-    private record ParticleRenderEntry(Particle particle, ParticleTextureSheet textureSheet,
-                                       boolean custom) {
-
-    }
-
-    private static final class EntityReplayCache {
-
-        private final EntityRenderDataList entityRenderDataList;
-        private final Map<Integer, EntityReplayState> entityStates;
-        private final List<BuiltBuffer> ownedBuffers;
-
-        private EntityReplayCache(EntityRenderDataList entityRenderDataList,
-            Map<Integer, EntityReplayState> entityStates,
-            List<BuiltBuffer> ownedBuffers) {
-            this.entityRenderDataList = entityRenderDataList;
-            this.entityStates = entityStates;
-            this.ownedBuffers = ownedBuffers;
-        }
-
-        private void close() {
-            for (BuiltBuffer ownedBuffer : ownedBuffers) {
-                ownedBuffer.close();
-            }
-        }
-    }
-
-    private static final class BlockEntityReplayCache {
-
-        private final EntityRenderDataList entityRenderDataList;
-        private final EntityRenderDataList crumblingRenderDataList;
-        private final Map<Integer, BlockEntityReplayState> renderStates;
-        private final List<BuiltBuffer> ownedBuffers;
-
-        private BlockEntityReplayCache(EntityRenderDataList entityRenderDataList,
-            EntityRenderDataList crumblingRenderDataList,
-            Map<Integer, BlockEntityReplayState> renderStates,
-            List<BuiltBuffer> ownedBuffers) {
-            this.entityRenderDataList = entityRenderDataList;
-            this.crumblingRenderDataList = crumblingRenderDataList;
-            this.renderStates = renderStates;
-            this.ownedBuffers = ownedBuffers;
-        }
-
-        private void close() {
-            for (BuiltBuffer ownedBuffer : ownedBuffers) {
-                ownedBuffer.close();
-            }
-        }
-    }
-
-    private static final class ParticleReplayCache {
-
-        private final EntityRenderDataList entityRenderDataList;
-        private final ParticleReplayState particleReplayState;
-        private final List<BuiltBuffer> ownedBuffers;
-
-        private ParticleReplayCache(EntityRenderDataList entityRenderDataList,
-            ParticleReplayState particleReplayState,
-            List<BuiltBuffer> ownedBuffers) {
-            this.entityRenderDataList = entityRenderDataList;
-            this.particleReplayState = particleReplayState;
-            this.ownedBuffers = ownedBuffers;
-        }
-
-        private void close() {
-            for (BuiltBuffer ownedBuffer : ownedBuffers) {
-                ownedBuffer.close();
-            }
         }
     }
 }

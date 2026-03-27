@@ -118,6 +118,9 @@ loom {
 
 tasks.named("runClient", JavaExec) {
    args "--width", "1920", "--height", "1080"
+   javaLauncher = javaToolchains.launcherFor {
+       languageVersion = JavaLanguageVersion.of(21)
+   }
 }
 
 repositories {

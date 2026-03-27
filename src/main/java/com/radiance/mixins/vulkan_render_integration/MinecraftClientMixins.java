@@ -1,12 +1,12 @@
 package com.radiance.mixins.vulkan_render_integration;
 
 import com.radiance.client.UnsafeManager;
+import com.radiance.client.cloud.CloudTileManager;
 import com.radiance.client.option.Options;
 import com.radiance.client.pipeline.Pipeline;
 import com.radiance.client.proxy.vulkan.RendererProxy;
 import com.radiance.client.proxy.vulkan.TextureProxy;
 import com.radiance.client.proxy.world.ChunkProxy;
-import com.radiance.client.proxy.world.EntityProxy;
 import java.util.Optional;
 import java.util.function.Consumer;
 import net.minecraft.client.MinecraftClient;
@@ -62,7 +62,6 @@ public class MinecraftClientMixins {
         }
 
         Pipeline.loadPipeline();
-        Options.applyQualityProfile(false);
         Pipeline.build();
     }
 
@@ -137,18 +136,10 @@ public class MinecraftClientMixins {
 
     @Redirect(method = "render(Z)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gl/Framebuffer;endWrite()V"))
     public void cancelFramebufferEndWrite(Framebuffer instance, boolean setViewport) {
-        if (RendererProxy.isShuttingDown()) {
-            return;
-        }
         ChunkProxy.waitImportantChunkRebuild();
         synchronized (TextureProxy.class) {
-            if (RendererProxy.isShuttingDown()) {
-                return;
-            }
             RendererProxy.submitCommandAndPresent();
-            if (!RendererProxy.isShuttingDown()) {
-                RendererProxy.acquireContext();
-            }
+            RendererProxy.acquireContext();
         }
     }
 
@@ -182,15 +173,11 @@ public class MinecraftClientMixins {
     }
     //endregion
 
-    // region <scheduleStop>
-    @Inject(method = "scheduleStop()V", at = @At(value = "HEAD"))
-    public void beginShutdown(CallbackInfo ci) {
-        RendererProxy.requestShutdown();
-    }
-
-    @Inject(method = "scheduleStop()V", at = @At(value = "TAIL"))
-    public void close(CallbackInfo ci) {
-        RendererProxy.closeRenderer();
+    // region <close>
+    @Inject(method = "close()V", at = @At(value = "HEAD"))
+    public void closeNativeRenderer(CallbackInfo ci) {
+        CloudTileManager.shutdown();
+        RendererProxy.close();
     }
     // endregion
 
@@ -206,7 +193,6 @@ public class MinecraftClientMixins {
     public void resetBuiltChunkNum(Screen disconnectionScreen, boolean transferring,
         CallbackInfo ci) {
         ChunkProxy.builtChunkNum = 0;
-        EntityProxy.clearReplayCaches();
     }
     // endregion
 }

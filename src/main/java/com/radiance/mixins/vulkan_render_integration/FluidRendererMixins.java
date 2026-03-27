@@ -1,5 +1,10 @@
 package com.radiance.mixins.vulkan_render_integration;
 
+import com.radiance.client.option.Options;
+import com.radiance.client.util.ChunkLightCollector;
+import com.radiance.client.util.LightSourceDef;
+import com.radiance.client.util.LightSourceRegistry;
+import com.radiance.client.vertex.PBRVertexConsumer;
 import static net.minecraft.client.render.block.FluidRenderer.shouldRenderSide;
 
 import net.minecraft.block.Block;
@@ -105,12 +110,17 @@ public abstract class FluidRendererMixins {
         int light,
         float nx,
         float ny,
-        float nz) {
+        float nz,
+        float emission) {
         vertexConsumer.vertex(x, y, z)
             .color(red, green, blue, 1.0F)
             .texture(u, v)
             .light(light)
             .normal(nx, ny, nz);
+        
+        if (vertexConsumer instanceof PBRVertexConsumer pbrVertexConsumer) {
+            pbrVertexConsumer.albedoEmission(emission);
+        }
     }
 
     @Inject(method =
@@ -127,6 +137,33 @@ public abstract class FluidRendererMixins {
         boolean isLava = fluidState.isIn(FluidTags.LAVA);
         Sprite[] fluidSprites = isLava ? this.lavaSprites : this.waterSprites;
         int tintColor = isLava ? 16777215 : BiomeColors.getWaterColor(world, pos);
+        float emission = isLava ? Options.emissionLava : 0.0F;
+
+        // --- Resolve light mode for lava (same logic as BlockModelRendererMixins) ---
+        if (isLava) {
+            LightSourceDef lightDef = LightSourceRegistry.getLightSource(blockState);
+            if (lightDef != null && lightDef.typeId >= 0 && lightDef.typeId < Options.AREA_LIGHT_TYPE_COUNT) {
+                int configuredMode = Options.blockLightMode[lightDef.typeId];
+                int effectiveMode;
+                if (configuredMode == Options.LIGHT_MODE_FORCE_AREA) {
+                    effectiveMode = Options.LIGHT_MODE_FORCE_AREA;
+                } else if (configuredMode == Options.LIGHT_MODE_FORCE_EMISSIVE) {
+                    effectiveMode = Options.LIGHT_MODE_FORCE_EMISSIVE;
+                } else {
+                    // Auto: always prefer area light (ReSTIR handles lighting)
+                    effectiveMode = Options.LIGHT_MODE_FORCE_AREA;
+                }
+
+                if (effectiveMode == Options.LIGHT_MODE_FORCE_AREA) {
+                    // Negative emission = signal to shader to suppress bounce; abs = self-glow
+                    emission = -Math.max(emission, 0.001f);
+                    if (ChunkLightCollector.isActive()) {
+                        ChunkLightCollector.addLight(pos, lightDef);
+                    }
+                }
+            }
+        }
+
         float red = (tintColor >> 16 & 0xFF) / 255.0F;
         float green = (tintColor >> 8 & 0xFF) / 255.0F;
         float blue = (tintColor & 0xFF) / 255.0F;
@@ -235,7 +272,7 @@ public abstract class FluidRendererMixins {
 
                 if (flowVector.x == 0.0 && flowVector.z == 0.0) {
                     Sprite stillSprite = fluidSprites[0];
-                    u1 = stillSprite.getFrameU(0.0F);
+u1 = stillSprite.getFrameU(0.0F);
                     v1 = stillSprite.getFrameV(0.0F);
                     u2 = u1;
                     v2 = stillSprite.getFrameV(1.0F);
@@ -308,7 +345,7 @@ public abstract class FluidRendererMixins {
                     packedLight,
                     normalX,
                     normalY,
-                    normalZ);
+                    normalZ, emission);
                 // 1: SW (0, 1) -> heightSW
                 this.vertex(vertexConsumer,
                     x + 0.0F,
@@ -322,7 +359,7 @@ public abstract class FluidRendererMixins {
                     packedLight,
                     normalX,
                     normalY,
-                    normalZ);
+                    normalZ, emission);
                 // 2: SE (1, 1) -> heightSE
                 this.vertex(vertexConsumer,
                     x + 1.0F,
@@ -336,7 +373,7 @@ public abstract class FluidRendererMixins {
                     packedLight,
                     normalX,
                     normalY,
-                    normalZ);
+                    normalZ, emission);
                 // 3: NE (1, 0) -> heightNE
                 this.vertex(vertexConsumer,
                     x + 1.0F,
@@ -350,7 +387,7 @@ public abstract class FluidRendererMixins {
                     packedLight,
                     normalX,
                     normalY,
-                    normalZ);
+                    normalZ, emission);
 
                 if (fluidState.canFlowTo(world, pos.up())) {
                     // 绘制内顶面 (Backface)，法线取反
@@ -366,7 +403,7 @@ public abstract class FluidRendererMixins {
                         packedLight,
                         -normalX,
                         -normalY,
-                        -normalZ);
+                        -normalZ, emission);
                     this.vertex(vertexConsumer,
                         x + 1.0F,
                         y + heightNE,
@@ -379,7 +416,7 @@ public abstract class FluidRendererMixins {
                         packedLight,
                         -normalX,
                         -normalY,
-                        -normalZ);
+                        -normalZ, emission);
                     this.vertex(vertexConsumer,
                         x + 1.0F,
                         y + heightSE,
@@ -392,7 +429,7 @@ public abstract class FluidRendererMixins {
                         packedLight,
                         -normalX,
                         -normalY,
-                        -normalZ);
+                        -normalZ, emission);
                     this.vertex(vertexConsumer,
                         x + 0.0F,
                         y + heightSW,
@@ -405,7 +442,7 @@ public abstract class FluidRendererMixins {
                         packedLight,
                         -normalX,
                         -normalY,
-                        -normalZ);
+                        -normalZ, emission);
                 }
             }
 
@@ -436,7 +473,7 @@ public abstract class FluidRendererMixins {
                     packedLightDown,
                     0.0F,
                     -1.0F,
-                    0.0F);
+                    0.0F, emission);
                 this.vertex(vertexConsumer,
                     x,
                     y + bottomYOffset,
@@ -449,7 +486,7 @@ public abstract class FluidRendererMixins {
                     packedLightDown,
                     0.0F,
                     -1.0F,
-                    0.0F);
+                    0.0F, emission);
                 this.vertex(vertexConsumer,
                     x + 1.0F,
                     y + bottomYOffset,
@@ -462,7 +499,7 @@ public abstract class FluidRendererMixins {
                     packedLightDown,
                     0.0F,
                     -1.0F,
-                    0.0F);
+                    0.0F, emission);
                 this.vertex(vertexConsumer,
                     x + 1.0F,
                     y + bottomYOffset,
@@ -475,7 +512,7 @@ public abstract class FluidRendererMixins {
                     packedLightDown,
                     0.0F,
                     -1.0F,
-                    0.0F);
+                    0.0F, emission);
             }
 
             int packedLightCenter = this.getLight(world, pos);
@@ -570,7 +607,7 @@ public abstract class FluidRendererMixins {
                         packedLightCenter,
                         dirX,
                         dirY,
-                        dirZ);
+                        dirZ, emission);
                     this.vertex(vertexConsumer,
                         xEnd,
                         y + yEnd,
@@ -583,7 +620,7 @@ public abstract class FluidRendererMixins {
                         packedLightCenter,
                         dirX,
                         dirY,
-                        dirZ);
+                        dirZ, emission);
                     this.vertex(vertexConsumer,
                         xEnd,
                         y + bottomYOffset,
@@ -596,7 +633,7 @@ public abstract class FluidRendererMixins {
                         packedLightCenter,
                         dirX,
                         dirY,
-                        dirZ);
+                        dirZ, emission);
                     this.vertex(vertexConsumer,
                         xStart,
                         y + bottomYOffset,
@@ -609,7 +646,7 @@ public abstract class FluidRendererMixins {
                         packedLightCenter,
                         dirX,
                         dirY,
-                        dirZ);
+                        dirZ, emission);
 
                     if (sideSprite != this.waterOverlaySprite) {
                         // 双面渲染（通常用于查看背面时），法线保持几何方向或取反均可。
@@ -626,7 +663,7 @@ public abstract class FluidRendererMixins {
                             packedLightCenter,
                             dirX,
                             dirY,
-                            dirZ);
+                            dirZ, emission);
                         this.vertex(vertexConsumer,
                             xEnd,
                             y + bottomYOffset,
@@ -639,7 +676,7 @@ public abstract class FluidRendererMixins {
                             packedLightCenter,
                             dirX,
                             dirY,
-                            dirZ);
+                            dirZ, emission);
                         this.vertex(vertexConsumer,
                             xEnd,
                             y + yEnd,
@@ -652,7 +689,7 @@ public abstract class FluidRendererMixins {
                             packedLightCenter,
                             dirX,
                             dirY,
-                            dirZ);
+                            dirZ, emission);
                         this.vertex(vertexConsumer,
                             xStart,
                             y + yStart,
@@ -665,7 +702,7 @@ public abstract class FluidRendererMixins {
                             packedLightCenter,
                             dirX,
                             dirY,
-                            dirZ);
+                            dirZ, emission);
                     }
                 }
             }

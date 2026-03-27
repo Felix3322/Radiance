@@ -1,48 +1,20 @@
 {
   "options.video.category.gameplay": "Game Play",
   "options.video.category.window": "Window",
-  "options.video.category.dlss": "DLSS",
   "options.video.category.ray_tracing": "Ray Tracing",
   "options.video.category.upscaler": "Upscaler",
   "options.video.category.terrain": "Terrain Build",
   "options.video.category.pipeline": "Pipeline Setup",
-  "options.video.dlss_mode.performance.tooltip": "Performance Mode",
-  "options.video.dlss_mode.balanced.tooltip": "Balanced Mode",
-  "options.video.dlss_mode.quality.tooltip": "Quality Mode",
-  "options.video.dlss_mode.dlaa.tooltip": "DLAA Mode",
-  "options.video.dlss_mode.performance": "Performance Mode",
-  "options.video.dlss_mode.balanced": "Balanced Mode",
-  "options.video.dlss_mode.quality": "Quality Mode",
-  "options.video.dlss_mode.dlaa": "DLAA Mode",
-  "options.video.dlss_mode": "DLSS Mode",
-  "options.video.quality_level": "Quality Level",
-  "options.video.quality_level.fluent": "Fluent",
-  "options.video.quality_level.performance": "Performance",
-  "options.video.quality_level.balanced": "Balanced",
-  "options.video.quality_level.quality": "High",
-  "options.video.quality_level.ultra": "Ultra",
-  "options.video.quality_level.extreme": "Extreme",
-  "options.video.upscaler_type": "Upscaler",
-  "options.video.upscaler_type.native": "Native",
-  "options.video.upscaler_type.fsr3": "FSR3",
-  "options.video.upscaler_quality": "Upscaler Quality",
-  "options.video.upscaler_quality.nativeaa": "Native AA",
-  "options.video.upscaler_quality.quality": "Quality",
-  "options.video.upscaler_quality.balanced": "Balanced",
-  "options.video.upscaler_quality.performance": "Performance",
-  "options.video.denoiser_mode": "Denoiser",
-  "options.video.denoiser_mode.dlss": "DLSS",
-  "options.video.denoiser_mode.svgf": "SVGF",
-  "options.video.denoiser_mode.nrd": "NRD",
-  "options.video.denoiser_mode.temporal": "Temporal Accumulation",
-  "options.video.hdr_output": "HDR Output",
-  "options.video.dlss_frame_generation": "DLSS Frame Generation (NVIDIA/NGX, Experimental)",
-  "options.video.output_scale_2x": "Output Scale 2x",
-  "options.video.simplified_indirect": "Simplified Indirect Lighting",
-  "options.video.reflex_enabled": "NVIDIA Reflex",
-  "options.video.reflex_boost": "Reflex Boost",
-  "options.video.vrr_mode": "VRR Frame Cap",
+  "options.video.category.environment": "Environmental Settings",
+  "options.video.category.camera_controls": "Camera Controls",
   "options.video.ray_bounces": "Ray Bounces",
+  "options.video.omm_enabled": "Opacity Micro Maps (OMM)",
+  "options.video.omm_baker_level": "OMM Subdivision Level",
+  "options.video.simplified_indirect": "Simplified Indirect Lighting",
+  "options.video.area_lights_enabled": "Area Lights",
+  "options.video.area_light_intensity": "Area Light Intensity",
+  "options.video.area_light_range": "Area Light Range",
+  "options.video.output_scale_2x": "Output Scale 2x",
   "options.video.chunk_building_batch_size": "Amount of chunks to build in a single submit",
   "options.video.chunk_building_total_batches": "Amount of building chunk batches",
   "options.video.pipeline_setup": "Setup Pipeline...",
@@ -58,186 +30,310 @@
   "render_pipeline.module.dlss.attribute.mode.quality": "Quality",
   "render_pipeline.module.dlss.attribute.mode.dlaa": "DLAA",
   "render_pipeline.module.ray_tracing.name": "Ray Tracing",
-  "render_pipeline.module.ray_tracing.attribute.world_representation_mode": "World Representation",
-  "render_pipeline.module.ray_tracing.attribute.world_representation_mode.triangle_blas": "Triangle BLAS",
-  "render_pipeline.module.ray_tracing.attribute.world_representation_mode.chunk_aabb": "Chunk AABB",
-  "render_pipeline.module.ray_tracing.attribute.chunk_traversal_mode": "Chunk Traversal",
-  "render_pipeline.module.ray_tracing.attribute.chunk_traversal_mode.triangle_hit": "Triangle Hit",
-  "render_pipeline.module.ray_tracing.attribute.chunk_traversal_mode.voxel_dda": "Voxel DDA",
-  "render_pipeline.module.ray_tracing.attribute.chunk_traversal_mode.brick": "Brick Traversal",
-  "render_pipeline.module.ray_tracing.attribute.chunk_traversal_mode.macrocell": "Macrocell Traversal",
-  "render_pipeline.module.ray_tracing.attribute.chunk_data_layout": "Chunk Data Layout",
-  "render_pipeline.module.ray_tracing.attribute.chunk_data_layout.triangle_geometry": "Triangle Geometry",
-  "render_pipeline.module.ray_tracing.attribute.chunk_data_layout.occupancy_bitmask": "Occupancy Bitmask",
-  "render_pipeline.module.ray_tracing.attribute.chunk_data_layout.occupancy_palette": "Occupancy + Material Palette",
-  "render_pipeline.module.ray_tracing.attribute.chunk_data_layout.occupancy_palette_face_mask": "Occupancy + Palette + Face Mask",
-  "render_pipeline.module.ray_tracing.attribute.chunk_macrocell_size": "Chunk Macrocell Size",
-  "render_pipeline.module.ray_tracing.attribute.chunk_macrocell_size.disabled": "Disabled",
-  "render_pipeline.module.ray_tracing.attribute.chunk_macrocell_size.size_4": "4³",
-  "render_pipeline.module.ray_tracing.attribute.chunk_macrocell_size.size_8": "8³",
-  "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode": "Terrain Meshing",
-  "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode.legacy_quads": "Legacy Quads",
-  "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode.greedy_meshing": "Greedy Meshing",
-  "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode.coplanar_merge": "Coplanar Merge",
-  "render_pipeline.module.ray_tracing.attribute.greedy_merge_max_span": "Greedy Merge Max Span",
-  "render_pipeline.module.ray_tracing.attribute.blas_inclusion_mode": "BLAS Inclusion",
-  "render_pipeline.module.ray_tracing.attribute.blas_inclusion_mode.all_geometry": "All Geometry",
-  "render_pipeline.module.ray_tracing.attribute.blas_inclusion_mode.opaque_and_shadow": "Opaque + Shadow Casters",
-  "render_pipeline.module.ray_tracing.attribute.blas_inclusion_mode.opaque_only": "Opaque Only",
-  "render_pipeline.module.ray_tracing.attribute.glass_path_mode": "Glass Path",
-  "render_pipeline.module.ray_tracing.attribute.foliage_path_mode": "Foliage Path",
-  "render_pipeline.module.ray_tracing.attribute.decoration_path_mode": "Decoration Path",
-  "render_pipeline.module.ray_tracing.attribute.geometry_path_mode.blas": "BLAS",
-  "render_pipeline.module.ray_tracing.attribute.geometry_path_mode.special_path": "Special Path",
-  "render_pipeline.module.ray_tracing.attribute.geometry_path_mode.exclude": "Exclude",
-  "render_pipeline.module.ray_tracing.attribute.far_field_geometry_mode": "Far Field Geometry",
-  "render_pipeline.module.ray_tracing.attribute.far_field_geometry_mode.exact_chunks": "Exact Chunks",
-  "render_pipeline.module.ray_tracing.attribute.far_field_geometry_mode.simplified_shell": "Simplified Shell",
-  "render_pipeline.module.ray_tracing.attribute.far_field_geometry_mode.clipmap": "Clipmap",
-  "render_pipeline.module.ray_tracing.attribute.far_field_geometry_mode.shell_and_clipmap": "Shell + Clipmap",
-  "render_pipeline.module.ray_tracing.attribute.far_field_start_distance_chunks": "Far Field Start Distance (Chunks)",
-  "render_pipeline.module.ray_tracing.attribute.far_field_material_mode": "Far Field Material",
-  "render_pipeline.module.ray_tracing.attribute.far_field_material_mode.full_pbr": "Full PBR",
-  "render_pipeline.module.ray_tracing.attribute.far_field_material_mode.flat_surface": "Flat Surface",
-  "render_pipeline.module.ray_tracing.attribute.reflection_ray_material_mode": "Reflection Ray Materials",
-  "render_pipeline.module.ray_tracing.attribute.reflection_ray_material_mode.all_materials": "All Materials",
-  "render_pipeline.module.ray_tracing.attribute.reflection_ray_material_mode.reflective_only": "Reflective Only",
-  "render_pipeline.module.ray_tracing.attribute.reflection_ray_material_mode.water_glass_metal": "Water / Glass / Metal",
-  "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode": "Diffuse GI Mode",
-  "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.full_ray_tracing": "Full Ray Tracing",
-  "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.probes": "Probes",
-  "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.radiance_cache": "Radiance Cache",
-  "render_pipeline.module.ray_tracing.attribute.diffuse_gi_mode.low_cost_hybrid": "Low Cost Hybrid",
-  "render_pipeline.module.ray_tracing.attribute.separate_entity_terrain_accel_structures": "Separate Entity / Terrain AS",
-  "render_pipeline.module.ray_tracing.attribute.terrain_update_interval_frames": "Terrain Update Interval (Frames)",
-  "render_pipeline.module.ray_tracing.attribute.entity_update_interval_frames": "Entity Update Interval (Frames)",
-  "render_pipeline.module.ray_tracing.attribute.block_entity_update_interval_frames": "Block Entity Update Interval (Frames)",
-  "render_pipeline.module.ray_tracing.attribute.particle_update_interval_frames": "Particle Update Interval (Frames)",
-  "render_pipeline.module.ray_tracing.attribute.particle_crit_glow": "Critical Hit Particles Glow",
-  "render_pipeline.module.ray_tracing.attribute.particle_death_smoke_glow": "Death Smoke Glow",
-  "render_pipeline.module.ray_tracing.attribute.particle_crit_glow_strength": "Critical Hit Glow Strength",
-  "render_pipeline.module.ray_tracing.attribute.particle_death_smoke_glow_strength": "Death Smoke Glow Strength",
   "render_pipeline.module.ray_tracing.attribute.num_ray_bounces": "Num Ray Bounces",
   "render_pipeline.module.ray_tracing.attribute.use_jitter": "Use Jitter",
-  "render_pipeline.module.ray_tracing.attribute.pbr_sampling_mode": "PBR Sampling Mode",
-  "render_pipeline.module.ray_tracing.attribute.pbr_sampling.nearest": "Nearest",
-  "render_pipeline.module.ray_tracing.attribute.pbr_sampling.bilinear": "Bilinear",
-  "render_pipeline.module.ray_tracing.attribute.transparent_split_mode": "Transparent Split Mode",
-  "render_pipeline.module.ray_tracing.attribute.transparent_split_mode.deterministic": "Deterministic",
-  "render_pipeline.module.ray_tracing.attribute.transparent_split_mode.stochastic": "Stochastic",
-  "render_pipeline.module.ray_tracing.attribute.direct_light_strength": "Direct Light Strength",
-  "render_pipeline.module.ray_tracing.attribute.indirect_light_strength": "Indirect Light Strength",
-  "render_pipeline.module.ray_tracing.attribute.basic_radiance": "Basic Radiance",
-  "render_pipeline.module.ray_tracing.attribute.atmosphere_planet_radius": "Planet Radius",
-  "render_pipeline.module.ray_tracing.attribute.atmosphere_top_radius": "Atmosphere Top Radius",
-  "render_pipeline.module.ray_tracing.attribute.rayleigh_scale_height": "Rayleigh Scale Height",
-  "render_pipeline.module.ray_tracing.attribute.mie_scale_height": "Mie Scale Height",
-  "render_pipeline.module.ray_tracing.attribute.rayleigh_scattering_coefficient": "Rayleigh Scattering Coeff",
-  "render_pipeline.module.ray_tracing.attribute.mie_anisotropy": "Mie Anisotropy",
-  "render_pipeline.module.ray_tracing.attribute.mie_scattering_coefficient": "Mie Scattering Coeff",
-  "render_pipeline.module.ray_tracing.attribute.minimum_view_cosine": "Celestial Size",
-  "render_pipeline.module.ray_tracing.attribute.sun_radiance": "Sun Radiance",
-  "render_pipeline.module.ray_tracing.attribute.moon_radiance": "Moon Radiance",
-  "render_pipeline.module.ray_tracing.attribute.use_sharc": "Use SHaRC",
-  "render_pipeline.module.ray_tracing.attribute.sharc_debug_mode": "SHaRC Debug Mode",
-  "render_pipeline.module.ray_tracing.attribute.shader_pack_path": "Shader Pack (empty=built-in)",
   "render_pipeline.module.temporal_accumulation.name": "Temporal Accumulation",
   "render_pipeline.module.tone_mapping.name": "Tone Mapping",
-  "render_pipeline.module.tone_mapping.attribute.method": "Method",
-  "render_pipeline.module.tone_mapping.attribute.method.pbr_neutral": "PBR Neutral",
-  "render_pipeline.module.tone_mapping.attribute.method.reinhard": "Reinhard",
-  "render_pipeline.module.tone_mapping.attribute.method.reinhard_white_point": "Reinhard (White Point)",
-  "render_pipeline.module.tone_mapping.attribute.method.aces": "ACES Fitted",
-  "render_pipeline.module.tone_mapping.attribute.method.aces_white_point": "ACES Fitted (White Point)",
-  "render_pipeline.module.tone_mapping.attribute.method.uncharted2": "Uncharted2",
   "render_pipeline.module.tone_mapping.attribute.middle_grey": "Middle Grey",
   "render_pipeline.module.tone_mapping.attribute.exposure_up_speed": "Exposure Up Speed",
   "render_pipeline.module.tone_mapping.attribute.exposure_down_speed": "Exposure Down Speed",
-  "render_pipeline.module.tone_mapping.attribute.log2_luminance_min": "Luminance Min (Log2)",
-  "render_pipeline.module.tone_mapping.attribute.log2_luminance_max": "Luminance Max (Log2)",
-  "render_pipeline.module.tone_mapping.attribute.low_percent": "Low Precent",
-  "render_pipeline.module.tone_mapping.attribute.high_percent": "High Precent",
-  "render_pipeline.module.tone_mapping.attribute.min_exposure": "Min exposure",
-  "render_pipeline.module.tone_mapping.attribute.max_exposure": "Max exposure",
-  "render_pipeline.module.tone_mapping.attribute.enable_auto_exposure": "Enable Auto Exposure",
-  "render_pipeline.module.tone_mapping.attribute.exposure_metering_mode": "Exposure Metering Mode",
-  "render_pipeline.module.tone_mapping.attribute.exposure_metering_mode.global": "Global",
-  "render_pipeline.module.tone_mapping.attribute.exposure_metering_mode.center": "Center",
-  "render_pipeline.module.tone_mapping.attribute.center_metering_percent": "Center Metering Percent",
-  "render_pipeline.module.tone_mapping.attribute.manual_exposure": "Manual Exposure",
-  "render_pipeline.module.tone_mapping.attribute.exposure_bias": "Exposure Bias",
-  "render_pipeline.module.tone_mapping.attribute.white_point": "White Point",
-  "render_pipeline.module.tone_mapping.attribute.saturation": "Saturation",
-  "render_pipeline.module.tone_mapping.attribute.clamp_output": "Should Clamp Output",
   "render_pipeline.module.post_render.name": "Post Render",
-  "render_pipeline.module.post_render.attribute.star_count": "Star Count",
-  "render_pipeline.module.post_render.attribute.star_min_size": "Star Min Size",
-  "render_pipeline.module.post_render.attribute.star_max_size": "Star Max Size",
-  "render_pipeline.module.post_render.attribute.star_radius": "Star Radius",
-  "render_pipeline.module.fsr_upscaler.name": "FSR3 Upscaler",
-  "render_pipeline.module.fsr_upscaler.attribute.enable": "Enable FSR3 Upscaler",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode": "Quality Mode",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode.native": "Native AA",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode.quality": "Quality",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode.balanced": "Balanced",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode.performance": "Performance",
-  "render_pipeline.module.fsr_upscaler.attribute.quality_mode.ultra": "Ultra Performance",
-  "render_pipeline.module.fsr_upscaler.attribute.sharpness": "Sharpness",
-  "render_pipeline.module.xess_sr.name": "XeSS Upscaler",
-  "render_pipeline.module.xess_sr.attribute.enable": "Enable XeSS Upscaler",
-  "render_pipeline.module.xess_sr.attribute.quality_mode": "Quality Mode",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.native": "Native AA",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.ultra_quality_plus": "Ultra Quality Plus",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.ultra_quality": "Ultra Quality",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.quality": "Quality",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.balanced": "Balanced",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.performance": "Performance",
-  "render_pipeline.module.xess_sr.attribute.quality_mode.ultra_performance": "Ultra Performance",
-  "render_pipeline.module.xess_sr.attribute.pre_exposure": "Pre Exposure",
+  "render_pipeline.module.fsr3_upscaler.name": "FSR3 Upscaler",
+  "render_pipeline.module.fsr3_upscaler.attribute.enable": "Enable FSR3 Upscaler",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode": "Quality Mode",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode.native": "Native AA",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode.quality": "Quality (Experimental)",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode.balanced": "Balanced (Experimental)",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode.performance": "Performance (Experimental)",
+  "render_pipeline.module.fsr3_upscaler.attribute.quality_mode.ultra": "Ultra Performance (Experimental)",
+  "render_pipeline.module.fsr3_upscaler.attribute.sharpness": "Sharpness",
   "render_pipeline.module.nrd.name": "NRD",
-  "render_pipeline.module.nrd.attribute.antilag_luminance_sigma_scale": "Antilag Luminance Sigma Scale",
-  "render_pipeline.module.nrd.attribute.antilag_luminance_sensitivity": "Antilag Luminance Sensitivity",
   "render_pipeline.module.nrd.attribute.max_accumulated_frame_num": "Max Accumulated Frames",
   "render_pipeline.module.nrd.attribute.max_fast_accumulated_frame_num": "Max Fast Accumulated Frames",
-  "render_pipeline.module.nrd.attribute.history_fix_frame_num": "History Fix Frames",
-  "render_pipeline.module.nrd.attribute.history_fix_base_pixel_stride": "History Fix Base Pixel Stride",
-  "render_pipeline.module.nrd.attribute.history_fix_alternate_pixel_stride": "History Fix Alt Pixel Stride",
-  "render_pipeline.module.nrd.attribute.fast_history_clamping_sigma_scale": "Fast History Clamping Sigma Scale",
-  "render_pipeline.module.nrd.attribute.diffuse_prepass_blur_radius": "Diffuse Prepass Blur Radius",
-  "render_pipeline.module.nrd.attribute.specular_prepass_blur_radius": "Specular Prepass Blur Radius",
-  "render_pipeline.module.nrd.attribute.min_hit_distance_weight": "Min Hit Distance Weight",
   "render_pipeline.module.nrd.attribute.min_blur_radius": "Min Blur Radius",
   "render_pipeline.module.nrd.attribute.max_blur_radius": "Max Blur Radius",
-  "render_pipeline.module.nrd.attribute.lobe_angle_fraction": "Lobe Angle Fraction",
-  "render_pipeline.module.nrd.attribute.roughness_fraction": "Roughness Fraction",
-  "render_pipeline.module.nrd.attribute.plane_distance_sensitivity": "Plane Distance Sensitivity",
-  "render_pipeline.module.nrd.attribute.specular_probability_thresholds_for_mv_modification_min": "Specular MV Threshold Min",
-  "render_pipeline.module.nrd.attribute.specular_probability_thresholds_for_mv_modification_max": "Specular MV Threshold Max",
-  "render_pipeline.module.nrd.attribute.firefly_suppressor_min_relative_scale": "Firefly Suppressor Min Relative Scale",
-  "render_pipeline.module.nrd.attribute.min_material_for_diffuse": "Min Material For Diffuse",
-  "render_pipeline.module.nrd.attribute.min_material_for_specular": "Min Material For Specular",
-  "render_pipeline.module.nrd.attribute.checkerboard_mode": "Checkerboard Mode",
   "render_pipeline.module.nrd.attribute.enable_anti_firefly": "Enable Anti-Firefly",
   "render_pipeline.module.nrd.attribute.hit_distance_reconstruction_mode": "Hit Distance Reconstruction Mode",
-  "render_pipeline.module.nrd.attribute.max_stabilized_frame_num": "Max Stabilized Frames",
-  "render_pipeline.module.nrd.attribute.specular_probability_threshold_low": "Specular Prob Threshold Low",
-  "render_pipeline.module.nrd.attribute.specular_probability_threshold_high": "Specular Prob Threshold High",
-  "render_pipeline.module.nrd.attribute.responsive_accumulation_roughness_threshold": "Responsive Accum Roughness Threshold",
-  "render_pipeline.module.nrd.attribute.responsive_accumulation_min_accumulated_frame_num": "Responsive Accum Min Frames",
-  "render_pipeline.module.nrd.attribute.disocclusion_threshold": "Disocclusion Threshold",
-  "render_pipeline.module.nrd.attribute.disocclusion_threshold_alternate": "Disocclusion Threshold Alt",
   "render_pipeline.module.temporal_accumulation.attribute.alpha": "Alpha (History Weight)",
   "render_pipeline.module.temporal_accumulation.attribute.depth_threshold": "Depth Threshold",
   "render_pipeline.module.temporal_accumulation.attribute.depth_scale": "Depth Scale",
   "module_attribute_screen.no_attributes": "No Attributes",
-  "render_pipeline.preset.name": "Preset",
-  "render_pipeline.preset.rt_dlss": "RT-DLSSRR",
-  "render_pipeline.preset.rt_nrd": "RT-NRD",
-  "render_pipeline.preset.rt_nrd_fsr": "RT-NRD-FSR",
-  "render_pipeline.preset.rt_nrd_xess": "RT-NRD-XeSS",
-  "render_pipeline.mode.name": "Mode",
-  "render_pipeline.mode.pipeline": "Pipeline",
-  "render_pipeline.mode.preset": "Preset",
-  "render_pipeline.true": "True",
-  "render_pipeline.false": "False"
+
+  "radiance.settings.title": "Radiance Settings",
+  "radiance.settings.camera_controls.title": "Camera Controls",
+  "radiance.settings.exposure.title": "Exposure",
+  "radiance.settings.post_processing.title": "Post Processing",
+  "options.video.camera_controls": "Camera Controls...",
+  "options.video.camera_controls.exposure": "Exposure...",
+  "options.video.camera_controls.post_processing": "Post Processing...",
+  "options.video.category.exposure": "Exposure",
+  "options.video.category.post_processing": "Post Processing",
+  "options.video.category.tonemapping": "Tonemapping",
+  "options.video.tonemap_mode": "Tonemapping",
+  "options.video.tonemap_mode.pbr_neutral": "PBR Neutral",
+  "options.video.tonemap_mode.reinhard_extended": "Reinhard Extended",
+  "options.video.tonemap_mode.aces": "ACES",
+  "options.video.tonemap_mode.agx": "AgX",
+  "options.video.tonemap_mode.lottes": "Lottes",
+  "options.video.tonemap_mode.frostbite": "Frostbite",
+  "options.video.tonemap_mode.uncharted2": "Uncharted 2",
+  "options.video.tonemap_mode.gt": "GT (Gran Turismo)",
+  "options.video.tonemap_mode.hdr_hermite_reinhard": "Hermite Spline Reinhard",
+  "options.video.tonemap_mode.hdr_reinhard_extended": "Reinhard Extended",
+  "options.video.tonemap_mode.hdr_bt2390": "BT.2390 EETF",
+  "options.video.tonemap_mode.hdr_frostbite": "Frostbite",
+  "options.video.min_exposure": "Min Exposure",
+  "options.video.max_exposure": "Max Exposure",
+  "options.video.sdr_transfer_function": "SDR Transfer Function",
+  "options.video.sdr_transfer_function.srgb": "sRGB",
+  "options.video.sdr_transfer_function.gamma22": "Gamma 2.2",
+  "options.video.saturation": "Color Expansion",
+  "options.video.exposure_compensation": "Exposure Compensation",
+  "options.video.manual_exposure_enabled": "Manual Exposure",
+  "options.video.manual_exposure": "Manual Exposure Value",
+  "options.video.cas_enabled": "AMD FidelityFX CAS",
+  "options.video.cas_sharpness": "CAS Sharpness",
+  "options.video.legacy_exposure": "Legacy Exposure",
+  "options.video.exposure_up_speed": "Exposure Up Speed",
+  "options.video.exposure_down_speed": "Exposure Down Speed",
+  "options.video.exposure_bright_adapt_boost": "Bright Adapt Boost",
+  "options.video.exposure_highlight_protection": "Highlight Protection",
+  "options.video.exposure_highlight_percentile": "Highlight Percentile",
+  "options.video.exposure_highlight_smooth_speed": "Highlight Smooth Speed",
+  "options.video.exposure_log2_max": "Histogram Max EV",
+  "options.video.middle_grey": "Middle Grey",
+  "options.video.lwhite": "White Point",
+  "options.video.psycho.enabled": "Psycho Visual Tonemapper",
+  "options.video.psycho.category": "Psycho Visual Settings...",
+  "options.video.psycho.highlights": "Highlights",
+  "options.video.psycho.shadows": "Shadows",
+  "options.video.psycho.contrast": "Contrast",
+  "options.video.psycho.purity": "Purity (Saturation)",
+  "options.video.psycho.bleaching": "Bleaching",
+  "options.video.psycho.clip_point": "Clip Point",
+  "options.video.psycho.hue_restore": "Hue Restore",
+  "options.video.psycho.adapt_contrast": "Adaptation Contrast",
+  "options.video.psycho.white_curve": "White Curve",
+  "options.video.psycho.cone_exponent": "Cone Exponent",
+  "key.radiance.settings": "Radiance Settings",
+  "key.category.radiance": "Radiance",
+  "render_pipeline.module.tone_mapping.attribute.tonemap_mode": "Tonemapping Mode",
+  "render_pipeline.module.tone_mapping.attribute.tonemap_mode.pbr_neutral": "PBR Neutral",
+  "render_pipeline.module.tone_mapping.attribute.tonemap_mode.reinhard_extended": "Reinhard Extended",
+  "render_pipeline.module.tone_mapping.attribute.lwhite": "White Point (Lwhite)",
+  "render_pipeline.module.tone_mapping.attribute.max_exposure": "Max Exposure",
+  "render_pipeline.module.tone_mapping.attribute.tonemap_mode.gt": "GT (Gran Turismo)",
+  "render_pipeline.module.tone_mapping.attribute.exposure_compensation": "Exposure Compensation",
+
+  "options.video.upscaler_mode": "Upscaler",
+  "options.video.upscaler_mode.off": "Off",
+  "options.video.upscaler_mode.fsr3": "FSR3",
+  "options.video.upscaler_mode.dlss_sr": "DLSS (Ray Reconstruction)",
+  "options.video.upscaler_quality": "Upscaler Quality",
+  "options.video.upscaler_quality.performance": "Performance",
+  "options.video.upscaler_quality.balanced": "Balanced",
+  "options.video.upscaler_quality.quality": "Quality",
+  "options.video.upscaler_quality.native": "Native",
+  "options.video.upscaler_quality.custom": "Custom",
+  "options.video.upscaler_res_override": "Resolution Override",
+  "options.video.upscaler_preset": "Upscaler Preset",
+
+  "options.video.dlss_d_enabled": "DLSS-D (Ray Reconstruction)",
+
+  "options.video.reflex_enabled": "NVIDIA Reflex",
+  "options.video.reflex_boost": "Reflex Boost",
+  "options.video.vrr_mode": "VRR Frame Cap",
+
+  "options.video.category.hdr": "HDR Output",
+  "options.video.hdr_enabled": "HDR10 Output",
+  "options.video.hdr_peak_nits": "Peak Brightness",
+  "options.video.hdr_paper_white_nits": "Paper White",
+  "options.video.hdr_ui_brightness_nits": "UI Brightness",
+  "options.video.category.emission": "Emission Settings",
+  "options.video.emission_settings": "Emission Settings...",
+"radiance.settings.emission.title": "Emission Settings",
+  "options.video.emission.lava": "Lava",
+  "options.video.emission.fire": "Fire",
+  "options.video.emission.soul_fire": "Soul Fire",
+  "options.video.emission.torch": "Torch",
+  "options.video.emission.soul_torch": "Soul Torch",
+  "options.video.emission.lantern": "Lantern",
+  "options.video.emission.soul_lantern": "Soul Lantern",
+  "options.video.emission.campfire": "Campfire",
+  "options.video.emission.soul_campfire": "Soul Campfire",
+  "options.video.emission.glowstone": "Glowstone",
+  "options.video.emission.shroomlight": "Shroomlight",
+  "options.video.emission.sea_lantern": "Sea Lantern",
+  "options.video.emission.froglight": "Froglight",
+  "options.video.emission.magma_block": "Magma Block",
+  "options.video.emission.beacon": "Beacon",
+  "options.video.emission.end_rod": "End Rod",
+  "options.video.emission.jack_o_lantern": "Jack o'Lantern",
+  "options.video.emission.nether_portal": "Nether Portal",
+  "options.video.emission.crying_obsidian": "Crying Obsidian",
+  "options.video.emission.respawn_anchor": "Respawn Anchor",
+  "options.video.emission.conduit": "Conduit",
+  "options.video.emission.amethyst_cluster": "Amethyst Cluster",
+  "options.video.emission.sculk_sensor": "Sculk Sensor",
+  "options.video.emission.sculk_catalyst": "Sculk Catalyst",
+  "options.video.emission.sculk_vein": "Sculk Vein",
+  "options.video.emission.sculk": "Sculk",
+  "options.video.emission.sculk_shrieker": "Sculk Shrieker",
+  "options.video.emission.brewing_stand": "Brewing Stand",
+  "options.video.emission.end_portal": "End Portal",
+  "options.video.emission.redstone_torch": "Redstone Torch",
+  "options.video.emission.redstone_lamp": "Redstone Lamp",
+  "options.video.emission.candle": "Candle",
+  "options.video.emission.cave_vines": "Cave Vines",
+  "options.video.emission.glow_lichen": "Glow Lichen",
+  "options.video.emission.furnace": "Furnace",
+  "options.video.emission.blast_furnace": "Blast Furnace",
+  "options.video.emission.smoker": "Smoker",
+  "options.video.emission.ender_chest": "Ender Chest",
+  "options.video.emission.copper_bulb": "Copper Bulb",
+  "options.video.emission.enchanting_table": "Enchanting Table"
+  ,"options.video.environment_settings": "Environmental Settings..."
+  ,"options.video.environment.dimension": "Dimension"
+  ,"options.video.environment.dimension.overworld": "Overworld"
+  ,"options.video.environment.dimension.nether": "Nether"
+  ,"options.video.environment.dimension.end": "End"
+  ,"radiance.settings.environment.title": "Environmental Settings"
+  ,"radiance.settings.environment.sky.title": "Sky Settings"
+  ,"radiance.settings.environment.clouds.title": "Cloud Settings"
+  ,"radiance.settings.environment.water.title": "Water Settings"
+  ,"radiance.settings.environment.sun.title": "Sun Settings"
+  ,"radiance.settings.environment.moon.title": "Moon Settings"
+  ,"options.video.environment.sky_settings": "Sky Settings..."
+  ,"options.video.environment.cloud_settings": "Cloud Settings..."
+  ,"options.video.environment.water_settings": "Water Settings..."
+  ,"options.video.environment.sun_settings": "Sun Settings..."
+  ,"options.video.environment.moon_settings": "Moon Settings..."
+  ,"options.video.environment.sky.category": "Sky"
+  ,"options.video.environment.clouds.category": "Clouds"
+  ,"options.video.environment.water.category": "Water"
+  ,"options.video.environment.sun.category": "Sun"
+  ,"options.video.environment.moon.category": "Moon"
+  ,"options.video.environment.sky_brightness": "Sky Brightness"
+  ,"options.video.environment.rain_blend": "Rain Blend Strength"
+  ,"options.video.environment.cloud_brightness": "Cloud Brightness"
+  ,"options.video.environment.cloud_alpha": "Cloud Alpha"
+  ,"options.video.environment.cloud_height_offset": "Cloud Height Offset"
+  ,"options.video.environment.clouds.volumetric.category": "Volumetric (Fancy)"
+  ,"options.video.environment.cloud_puffiness": "Cloud Puffiness"
+  ,"options.video.environment.cloud_detail_scale": "Cloud Detail Scale"
+  ,"options.video.environment.cloud_detail_strength": "Cloud Detail Strength"
+  ,"options.video.environment.cloud_shadow_strength": "Cloud Shadow Strength"
+  ,"options.video.environment.cloud_thickness": "Cloud Thickness"
+  ,"options.video.environment.cloud_density": "Cloud Density"
+  ,"options.video.environment.cloud_shadow_noise": "Noise Affects Shadows"
+  ,"options.video.environment.water_tint_r": "Water Tint Red"
+  ,"options.video.environment.water_tint_g": "Water Tint Green"
+  ,"options.video.environment.water_tint_b": "Water Tint Blue"
+  ,"options.video.environment.water_fog_strength": "Water Fog Strength"
+  ,"options.video.environment.sun_size": "Sun Size"
+  ,"options.video.environment.sun_intensity": "Sun Intensity"
+  ,"options.video.environment.moon_size": "Moon Size"
+  ,"options.video.environment.moon_intensity": "Moon Intensity"
+
+  ,"radiance.dlss_missing.title": "DLSS Libraries Missing"
+  ,"radiance.dlss_missing.line1": "The DLSS runtime libraries were not found."
+  ,"radiance.dlss_missing.line2": "DLSS Ray Reconstruction will be unavailable until they are installed."
+  ,"radiance.dlss_missing.line3": "Download URL (click to copy):"
+  ,"radiance.dlss_missing.line4": "Place the files in (click to copy):"
+  ,"radiance.dlss_missing.copy_url": "Copy Download URL"
+  ,"radiance.dlss_missing.copy_path": "Copy Install Path"
+  ,"radiance.dlss_missing.copied": "✔ Copied to clipboard!"
+  ,"radiance.dlss_missing.recheck": "Re-check Now"
+  ,"radiance.dlss_missing.recheck_failed": "✘ Files not found — copy the DLLs first"
+  ,"options.video.dlss_missing_warning": "⚠ DLSS Files Missing — Click for Details & Copy Links"
+  ,"radiance.dlss_missing.menu_warning": "⚠ DLSS files missing — press O at boot for details"
+
+  ,"options.video.environment.sun.orbit_category": "Sun Orbit"
+  ,"options.video.environment.sun_path_mode": "Sun Path"
+  ,"options.video.environment.sun_path_mode.legacy": "Legacy (Overhead)"
+  ,"options.video.environment.sun_path_mode.physical": "Physical (Tilted)"
+  ,"options.video.environment.sun_inclination": "Inclination"
+  ,"options.video.environment.sun_azimuth_offset": "Azimuth Offset"
+  ,"options.video.environment.moon.orbit_category": "Moon Orbit"
+  ,"options.video.environment.moon_follow_sun": "Follow Sun"
+  ,"options.video.environment.moon_inclination": "Inclination"
+  ,"options.video.environment.moon_azimuth_offset": "Azimuth Offset"
+
+  ,"options.video.category.area_lights": "Area Lights"
+  ,"options.video.area_light_settings": "Area Light Settings..."
+  ,"options.video.area_light_shadow_softness": "Shadow Softness"
+  ,"options.video.area_light.restir": "ReSTIR DI"
+  ,"options.video.category.restir": "ReSTIR Tuning"
+  ,"options.video.restir_candidates": "RIS Candidates"
+  ,"options.video.restir_temporal_m_clamp": "Temporal M Clamp"
+  ,"options.video.restir_w_clamp": "Weight Clamp"
+  ,"options.video.restir_spatial_taps": "Spatial Taps"
+  ,"options.video.restir_spatial_radius": "Spatial Radius"
+  ,"options.video.category.restir_performance": "ReSTIR Performance"
+  ,"options.video.restir_simplified_brdf": "Simplified BRDF"
+  ,"options.video.restir_spatial_enabled": "Spatial Reuse"
+  ,"options.video.restir_bounce_enabled": "Bounce ReSTIR"
+  ,"radiance.settings.area_lights.title": "Area Light Settings"
+  ,"options.video.area_light.global_category": "Global Controls"
+  ,"options.video.area_light.per_block_category": "Per-Block Settings"
+  ,"options.video.area_light.block.torch": "Torch"
+  ,"options.video.area_light.block.soul_torch": "Soul Torch"
+  ,"options.video.area_light.block.lantern": "Lantern"
+  ,"options.video.area_light.block.soul_lantern": "Soul Lantern"
+  ,"options.video.area_light.block.campfire": "Campfire"
+  ,"options.video.area_light.block.soul_campfire": "Soul Campfire"
+  ,"options.video.area_light.block.glowstone": "Glowstone"
+  ,"options.video.area_light.block.sea_lantern": "Sea Lantern"
+  ,"options.video.area_light.block.shroomlight": "Shroomlight"
+  ,"options.video.area_light.block.jack_o_lantern": "Jack o'Lantern"
+  ,"options.video.area_light.block.end_rod": "End Rod"
+  ,"options.video.area_light.block.beacon": "Beacon"
+  ,"options.video.area_light.block.ochre_froglight": "Ochre Froglight"
+  ,"options.video.area_light.block.verdant_froglight": "Verdant Froglight"
+  ,"options.video.area_light.block.pearl_froglight": "Pearl Froglight"
+  ,"options.video.area_light.block.redstone_torch": "Redstone Torch"
+  ,"options.video.area_light.block.redstone_lamp": "Redstone Lamp"
+  ,"options.video.area_light.block.candle": "Candle"
+  ,"options.video.area_light.block.cave_vines": "Cave Vines"
+  ,"options.video.area_light.block.glow_lichen": "Glow Lichen"
+  ,"options.video.area_light.block.furnace": "Furnace"
+  ,"options.video.area_light.block.blast_furnace": "Blast Furnace"
+  ,"options.video.area_light.block.smoker": "Smoker"
+  ,"options.video.area_light.block.ender_chest": "Ender Chest"
+  ,"options.video.area_light.block.crying_obsidian": "Crying Obsidian"
+  ,"options.video.area_light.block.nether_portal": "Nether Portal"
+  ,"options.video.area_light.block.conduit": "Conduit"
+  ,"options.video.area_light.block.respawn_anchor_1": "Respawn Anchor (1 Charge)"
+  ,"options.video.area_light.block.respawn_anchor_2": "Respawn Anchor (2 Charges)"
+  ,"options.video.area_light.block.respawn_anchor_3": "Respawn Anchor (3 Charges)"
+  ,"options.video.area_light.block.respawn_anchor_4": "Respawn Anchor (4 Charges)"
+  ,"options.video.area_light.block.amethyst_cluster": "Amethyst Cluster"
+  ,"options.video.area_light.block.large_amethyst_bud": "Large Amethyst Bud"
+  ,"options.video.area_light.block.copper_bulb": "Copper Bulb"
+  ,"options.video.area_light.block.enchanting_table": "Enchanting Table"
+  ,"options.video.area_light.block.lava": "Lava"
+  ,"options.video.area_light.block.fire": "Fire"
+  ,"options.video.area_light.block.soul_fire": "Soul Fire"
+  ,"options.video.area_light.block.magma_block": "Magma Block"
+  ,"options.video.area_light.block.sculk_sensor": "Sculk Sensor"
+  ,"options.video.area_light.block.sculk_catalyst": "Sculk Catalyst"
+  ,"options.video.area_light.block.sculk_vein": "Sculk Vein"
+  ,"options.video.area_light.block.sculk": "Sculk"
+  ,"options.video.area_light.block.sculk_shrieker": "Sculk Shrieker"
+  ,"options.video.area_light.block.brewing_stand": "Brewing Stand"
+  ,"options.video.area_light.block.end_portal": "End Portal"
+  ,"options.video.area_light.block.end_portal_frame": "End Portal Frame"
+  ,"options.video.area_light.block.light_mode": "Light Mode"
+  ,"options.video.area_light.block.intensity": "Intensity"
+  ,"options.video.area_light.block.scale": "Scale"
+  ,"options.video.area_light.block.y_offset": "Y Offset"
+  ,"options.video.area_light.block.color_r": "Color Red"
+  ,"options.video.area_light.block.color_g": "Color Green"
+  ,"options.video.area_light.block.color_b": "Color Blue"
+
+  ,"radiance.settings.reset_defaults": "Reset to Defaults"
+  ,"radiance.settings.welcome_message.on": "Welcome Message: On"
+  ,"radiance.settings.welcome_message.off": "Welcome Message: Off"
+  ,"radiance.welcome_message.line1": "\u00a7bRadiance\u00a7r \u2014 Press \u00a7eO\u00a7r to open the settings menu."
+  ,"radiance.welcome_message.line2": "\u00a77(Disable this message via Welcome Message in the O menu.)\u00a7r"
 }

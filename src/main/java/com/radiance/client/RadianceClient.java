@@ -1,6 +1,8 @@
 package com.radiance.client;
 
 import com.mojang.logging.LogUtils;
+import com.radiance.client.gui.DlssMissingScreen;
+import com.radiance.client.input.KeyInputHandler;
 import com.radiance.client.option.Options;
 import com.radiance.client.pipeline.Pipeline;
 import com.radiance.client.proxy.vulkan.RendererProxy;
@@ -22,13 +24,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.text.Text;
 import org.slf4j.Logger;
 
 public class RadianceClient implements ClientModInitializer {
 
     public static final Logger LOGGER = LogUtils.getLogger();
     public static Path radianceDir;
+    public static boolean dlssMissing = false;
+    public static String dlssDownloadUrl = "";
+    public static Path dlssInstallDir;
 
     @Override
     public void onInitializeClient() {
@@ -44,6 +51,10 @@ public class RadianceClient implements ClientModInitializer {
         // core lib
         String osName = System.getProperty("os.name");
         if (osName.toLowerCase().contains("windows")) {
+            Path libTargetPath = radianceDir.resolve("core.lib");
+            Path libResourcePath = Path.of("core.lib");
+            copyFileFromResource(libTargetPath, libResourcePath);
+
             Path dllTargetPath = radianceDir.resolve("core.dll");
             Path dllResourcePath = Path.of("core.dll");
             copyFileFromResource(dllTargetPath, dllResourcePath);
@@ -74,12 +85,27 @@ public class RadianceClient implements ClientModInitializer {
             loadOptionalLibrary(xessPath);
 
             System.load(dllTargetPath.toAbsolutePath().toString());
+
+            dlssDownloadUrl = "https://github.com/NVIDIA/DLSS/tree/main/lib/Windows_x86_64/rel";
+            dlssInstallDir = radianceDir;
+            if (!recheckDlssFiles()) {
+                logMissingDlss("nvngx_dlss.dll", "nvngx_dlssd.dll", dlssDownloadUrl,
+                    radianceDir.toAbsolutePath().toString());
+            }
         } else if (osName.toLowerCase().contains("linux")) {
             Path soTargetPath = radianceDir.resolve("libcore.so");
             Path soResourcePath = Path.of("libcore.so");
             copyFileFromResource(soTargetPath, soResourcePath);
 
             System.load(soTargetPath.toAbsolutePath().toString());
+
+            dlssDownloadUrl = "https://github.com/NVIDIA/DLSS/tree/main/lib/Linux_x86_64/rel";
+            dlssInstallDir = radianceDir;
+            if (!recheckDlssFiles()) {
+                logMissingDlss("libnvidia-ngx-dlss.so.310.5.3",
+                    "libnvidia-ngx-dlssd.so.310.5.3", dlssDownloadUrl,
+                    radianceDir.toAbsolutePath().toString());
+            }
         } else {
             throw new RuntimeException("The OS " + osName + " is not supported");
         }
@@ -100,6 +126,40 @@ public class RadianceClient implements ClientModInitializer {
         Options.readOptions();
 
         Pipeline.reloadAllModuleEntries();
+        KeyInputHandler.register();
+
+        if (dlssMissing) {
+            ClientTickEvents.END_CLIENT_TICK.register(new ClientTickEvents.EndTick() {
+                private boolean shown = false;
+
+                @Override
+                public void onEndTick(MinecraftClient client) {
+                    if (!shown && client.currentScreen != null) {
+                        shown = true;
+                        client.setScreen(new DlssMissingScreen(client.currentScreen));
+                    }
+                }
+            });
+        }
+
+        if (Options.showWelcomeMessage) {
+            ClientTickEvents.END_CLIENT_TICK.register(new ClientTickEvents.EndTick() {
+                private boolean shown = false;
+
+                @Override
+                public void onEndTick(MinecraftClient client) {
+                    if (!shown && client.player != null) {
+                        shown = true;
+                        Options.showWelcomeMessage = false;
+                        Options.overwriteConfig();
+                        client.inGameHud.getChatHud().addMessage(
+                            Text.translatable("radiance.welcome_message.line1"));
+                        client.inGameHud.getChatHud().addMessage(
+                            Text.translatable("radiance.welcome_message.line2"));
+                    }
+                }
+            });
+        }
     }
 
     public void copyFileFromResource(Path targetPath, Path resourcePath) {
@@ -207,5 +267,32 @@ public class RadianceClient implements ClientModInitializer {
                 copyFileFromResource(targetFile, childResourcePath);
             });
         }
+    }
+
+    public static boolean recheckDlssFiles() {
+        String osName = System.getProperty("os.name");
+        if (osName.toLowerCase().contains("windows")) {
+            Path dlssTargetPath = radianceDir.resolve("nvngx_dlss.dll");
+            Path dlssDTargetPath = radianceDir.resolve("nvngx_dlssd.dll");
+            if (Files.exists(dlssTargetPath) && Files.exists(dlssDTargetPath)) {
+                dlssMissing = false;
+                return true;
+            }
+        } else {
+            Path dlssTargetPath = radianceDir.resolve("libnvidia-ngx-dlss.so.310.5.3");
+            Path dlssDTargetPath = radianceDir.resolve("libnvidia-ngx-dlssd.so.310.5.3");
+            if (Files.exists(dlssTargetPath) && Files.exists(dlssDTargetPath)) {
+                dlssMissing = false;
+                return true;
+            }
+        }
+        dlssMissing = true;
+        return false;
+    }
+
+    private void logMissingDlss(String file1, String file2, String url, String destFolder) {
+        LOGGER.warn("DLSS runtime libraries not found: {} and/or {}", file1, file2);
+        LOGGER.warn("DLSS will be unavailable. Download from: {}", url);
+        LOGGER.warn("Place the files in: {}", destFolder);
     }
 }

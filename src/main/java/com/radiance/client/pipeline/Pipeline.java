@@ -5,7 +5,6 @@ import com.radiance.client.constant.VulkanConstants;
 import com.radiance.client.option.Options;
 import com.radiance.client.pipeline.config.AttributeConfig;
 import com.radiance.client.pipeline.config.ImageConfig;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -16,11 +15,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-
 import org.lwjgl.system.MemoryUtil;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -31,22 +28,10 @@ import org.yaml.snakeyaml.inspector.TagInspector;
 public class Pipeline {
 
     public static Pipeline INSTANCE = new Pipeline();
-    private static final String RAY_TRACING_MODULE_NAME = "render_pipeline.module.ray_tracing.name";
-    private static final String DLSS_MODULE_NAME = "render_pipeline.module.dlss.name";
-    private static final String NRD_MODULE_NAME = "render_pipeline.module.nrd.name";
-    private static final String TEMPORAL_ACCUMULATION_MODULE_NAME = "render_pipeline.module.temporal_accumulation.name";
-    private static final String FSR3_MODULE_NAME = "render_pipeline.module.fsr_upscaler.name";
-    private static final String XESS_MODULE_NAME = "render_pipeline.module.xess_sr.name";
-    private static final String TONE_MAPPING_MODULE_NAME = "render_pipeline.module.tone_mapping.name";
-    private static final String POST_RENDER_MODULE_NAME = "render_pipeline.module.post_render.name";
     private static Path PIPELINE_CONFIG_PATH = null;
     private final List<Module> modules = new ArrayList<>();
     private final Map<ImageConfig, List<ImageConfig>> moduleConnections = new HashMap<>();
     private Map<String, ModuleEntry> moduleEntries;
-
-    private PipelineMode mode = PipelineMode.PRESET;
-    private String activePresetName = null;
-    private static boolean buildRecoveryInProgress = false;
 
     private Pipeline() {
     }
@@ -74,111 +59,13 @@ public class Pipeline {
     }
 
     public static Module addModule(String name) {
-        if (!isModuleAvailable(name)) {
-            throw new RuntimeException("Module with name " + name + " is not available.");
-        }
-
-        ModuleEntry moduleEntry = INSTANCE.moduleEntries.get(name);
-        if (moduleEntry == null) {
-            throw new RuntimeException("Module with name " + name + " not found.");
-        }
-
-        Module module = moduleEntry.loadModule();
+        Module module = INSTANCE.moduleEntries.get(name).loadModule();
         if (module == null) {
             throw new RuntimeException("Module with name " + name + " not found.");
         }
         INSTANCE.modules.add(module);
 
         return module;
-    }
-
-    public static boolean isModuleAvailable(String moduleName) {
-        if (moduleName == null || moduleName.isEmpty()) {
-            return false;
-        }
-        if (INSTANCE.moduleEntries == null || !INSTANCE.moduleEntries.containsKey(moduleName)) {
-            return false;
-        }
-        return isNativeModuleAvailable(moduleName);
-    }
-
-    private static boolean areModulesAvailable(String... moduleNames) {
-        if (moduleNames == null || moduleNames.length == 0) {
-            return false;
-        }
-        for (String moduleName : moduleNames) {
-            if (!isModuleAvailable(moduleName)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public static boolean isPresetAvailable(String presetName) {
-        if (Objects.equals(presetName, Presets.RT_DLSSRR.key)) {
-            return areModulesAvailable(
-                    RAY_TRACING_MODULE_NAME,
-                    DLSS_MODULE_NAME,
-                    TONE_MAPPING_MODULE_NAME,
-                    POST_RENDER_MODULE_NAME);
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD.key)) {
-            return areModulesAvailable(
-                    RAY_TRACING_MODULE_NAME,
-                    NRD_MODULE_NAME,
-                    TEMPORAL_ACCUMULATION_MODULE_NAME,
-                    TONE_MAPPING_MODULE_NAME,
-                    POST_RENDER_MODULE_NAME);
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD_FSR.key)) {
-            return areModulesAvailable(
-                    RAY_TRACING_MODULE_NAME,
-                    NRD_MODULE_NAME,
-                    FSR3_MODULE_NAME,
-                    TONE_MAPPING_MODULE_NAME,
-                    POST_RENDER_MODULE_NAME);
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD_XESS.key)) {
-            return areModulesAvailable(
-                    RAY_TRACING_MODULE_NAME,
-                    NRD_MODULE_NAME,
-                    XESS_MODULE_NAME,
-                    TONE_MAPPING_MODULE_NAME,
-                    POST_RENDER_MODULE_NAME);
-        }
-
-        return false;
-    }
-
-    private static String getBestAvailablePresetName() {
-        if (isPresetAvailable(Presets.RT_NRD_FSR.key)) {
-            return Presets.RT_NRD_FSR.key;
-        }
-        if (isPresetAvailable(Presets.RT_NRD_XESS.key)) {
-            return Presets.RT_NRD_XESS.key;
-        }
-        if (isPresetAvailable(Presets.RT_NRD.key)) {
-            return Presets.RT_NRD.key;
-        }
-        if (isPresetAvailable(Presets.RT_DLSSRR.key)) {
-            return Presets.RT_DLSSRR.key;
-        }
-        return null;
-    }
-
-    private static void assembleBestAvailablePreset(String reason) {
-        String fallbackPresetName = getBestAvailablePresetName();
-        if (fallbackPresetName == null) {
-            throw new RuntimeException("No compatible preset is available.");
-        }
-
-        if (reason != null && !reason.isEmpty()) {
-            RadianceClient.LOGGER.warn(reason + " Fallback preset: " + fallbackPresetName);
-        }
-        assemblePresetByKeyInternal(fallbackPresetName);
     }
 
     public static Module addModule(Module module) {
@@ -190,7 +77,7 @@ public class Pipeline {
     public static void connect(ImageConfig src, ImageConfig dst) {
         if (!Objects.equals(src.format, dst.format)) {
             throw new RuntimeException(
-                    "Connected format does not match: " + src.format + " != " + dst.format);
+                "Connected format does not match: " + src.format + " != " + dst.format);
         }
         if (!INSTANCE.moduleConnections.containsKey(src)) {
             INSTANCE.moduleConnections.put(src, new ArrayList<>());
@@ -199,9 +86,11 @@ public class Pipeline {
     }
 
     public static void connectOutput(ImageConfig src) {
-        if (!Objects.equals(src.format, "R8G8B8A8_UNORM")
-            && !Objects.equals(src.format, "R16G16B16A16_SFLOAT")) {
-            throw new RuntimeException("Invalid output format.");
+        // HDR10: allow A2B10G10R10_UNORM_PACK32 when HDR is enabled, otherwise SDR only
+        boolean validFormat = Objects.equals(src.format, "R8G8B8A8_UNORM")
+            || Objects.equals(src.format, "A2B10G10R10_UNORM_PACK32");
+        if (!validFormat) {
+            throw new RuntimeException("Invalid output format: " + src.format);
         }
         src.finalOutput = true;
     }
@@ -214,7 +103,7 @@ public class Pipeline {
                 for (ImageConfig dest : entry.getValue()) {
                     if (dstTosrcMap.containsKey(dest)) {
                         throw new RuntimeException(
-                                "Input config '" + dest.name + "' has multiple sources connected!");
+                            "Input config '" + dest.name + "' has multiple sources connected!");
                     }
                     dstTosrcMap.put(dest, source);
                 }
@@ -228,7 +117,7 @@ public class Pipeline {
                     if (conf.finalOutput) {
                         if (finalOutputConfig != null) {
                             throw new RuntimeException(
-                                    "Multiple final outputs detected! Only one allows.");
+                                "Multiple final outputs detected! Only one allows.");
                         }
                         finalOutputConfig = conf;
                         finalModule = module;
@@ -247,21 +136,75 @@ public class Pipeline {
 
             topologicalSort(finalModule, dstTosrcMap, visited, visiting, sortedModules);
 
+            if (Options.isDevLoggingEnabled()) {
+                RadianceClient.LOGGER.info("Pipeline build: {} module(s)", sortedModules.size());
+                for (Module m : sortedModules) {
+                    RadianceClient.LOGGER.info("  module: {}", m.name);
+                    if (m.attributeConfigs != null) {
+                        for (AttributeConfig a : m.attributeConfigs) {
+                            RadianceClient.LOGGER.info("    attr: {} = {}", a.name, a.value);
+                        }
+                    }
+                }
+            }
+
             // integrity check
             for (Module m : sortedModules) {
                 for (ImageConfig inputConf : m.inputImageConfigs) {
                     if (!dstTosrcMap.containsKey(inputConf)) {
                         throw new RuntimeException(
-                                "Module '" + m.name + "' has unconnected input: " + inputConf.name);
+                            "Module '" + m.name + "' has unconnected input: " + inputConf.name);
                     }
                 }
+            }
+
+            Map<ImageConfig, String> effectiveFormats = new HashMap<>();
+            for (Module module : sortedModules) {
+                for (ImageConfig inputConf : module.inputImageConfigs) {
+                    effectiveFormats.put(inputConf, inputConf.format);
+                }
+                for (ImageConfig outputConf : module.outputImageConfigs) {
+                    effectiveFormats.put(outputConf, outputConf.format);
+                }
+            }
+            effectiveFormats.put(finalOutputConfig, finalOutputConfig.format);
+
+            // HDR10: override output formats when HDR is requested and supported.
+            boolean hdrFormatsEnabled = Options.hdrEnabled && Options.isHdrSupported();
+            if (hdrFormatsEnabled) {
+                String hdrFormat = "A2B10G10R10_UNORM_PACK32";
+                for (Module m : sortedModules) {
+                    // Override tone_mapping output and post_render input/output to HDR10 format.
+                    if (m.name.contains("tone_mapping") || m.name.contains("post_render")) {
+                        for (ImageConfig outConfig : m.outputImageConfigs) {
+                            if ("R8G8B8A8_UNORM".equals(outConfig.format)) {
+                                effectiveFormats.put(outConfig, hdrFormat);
+                            }
+                        }
+                        for (ImageConfig inConfig : m.inputImageConfigs) {
+                            if ("R8G8B8A8_UNORM".equals(inConfig.format)) {
+                                effectiveFormats.put(inConfig, hdrFormat);
+                            }
+                        }
+                    }
+                }
+                // Also override the final output config.
+                if ("R8G8B8A8_UNORM".equals(finalOutputConfig.format)) {
+                    effectiveFormats.put(finalOutputConfig, hdrFormat);
+                }
+            } else if (Options.hdrEnabled) {
+                RadianceClient.LOGGER.warn(
+                    "HDR is requested but not supported on this platform/display; using SDR-safe pipeline formats.");
             }
 
             // image list
             List<Integer> imageFormatList = new ArrayList<>();
             Map<ImageConfig, Integer> configToImageIdMap = new HashMap<>();
 
-            int finalFmtId = VulkanConstants.VkFormat.getVkFormatByName(finalOutputConfig.format);
+            int
+                finalFmtId =
+                VulkanConstants.VkFormat.getVkFormatByName(
+                    effectiveFormats.getOrDefault(finalOutputConfig, finalOutputConfig.format));
             imageFormatList.add(finalFmtId);
             configToImageIdMap.put(finalOutputConfig, 0);
 
@@ -276,8 +219,10 @@ public class Pipeline {
                         }
                     } else {
                         imgId = imageFormatList.size();
+                        String outFormat = effectiveFormats.getOrDefault(outConfig,
+                            outConfig.format);
                         imageFormatList.add(
-                                VulkanConstants.VkFormat.getVkFormatByName(outConfig.format));
+                            VulkanConstants.VkFormat.getVkFormatByName(outFormat));
                         configToImageIdMap.put(outConfig, imgId);
                     }
 
@@ -293,35 +238,21 @@ public class Pipeline {
             List<List<AttributeConfig>> moduleAttributes = new ArrayList<>();
             for (Module m : sortedModules) {
                 moduleAttributes.add(
-                        m.attributeConfigs != null ? m.attributeConfigs : new ArrayList<>());
+                    m.attributeConfigs != null ? m.attributeConfigs : new ArrayList<>());
             }
 
             buildNative(sortedModules, imageFormatList, configToImageIdMap, moduleAttributes);
         } catch (Exception e) {
-            RadianceClient.LOGGER.error("Failed to build render pipeline", e);
-            if (!buildRecoveryInProgress) {
-                buildRecoveryInProgress = true;
-                try {
-                    clear();
-                    assembleBestAvailablePreset(
-                        "Pipeline build failed (" + e.getMessage() + ").");
-                    build();
-                    return;
-                } catch (Exception recoveryException) {
-                    RadianceClient.LOGGER.error("Fallback pipeline build also failed",
-                        recoveryException);
-                } finally {
-                    buildRecoveryInProgress = false;
-                }
-            }
+            RadianceClient.LOGGER.error(e.toString());
+            Pipeline.loadPipeline();
         } finally {
             savePipeline();
         }
     }
 
     private static void topologicalSort(Module current,
-                                        Map<ImageConfig, ImageConfig> inputToSourceMap, Set<Module> visited, Set<Module> visiting,
-                                        List<Module> result) {
+        Map<ImageConfig, ImageConfig> inputToSourceMap, Set<Module> visited, Set<Module> visiting,
+        List<Module> result) {
         if (visiting.contains(current)) {
             throw new RuntimeException("Cycle detected involving module: " + current.name);
         }
@@ -346,7 +277,7 @@ public class Pipeline {
     }
 
     private static void buildNative(List<Module> modules, List<Integer> formats,
-                                    Map<ImageConfig, Integer> imgMap, List<List<AttributeConfig>> moduleAttributes) {
+        Map<ImageConfig, Integer> imgMap, List<List<AttributeConfig>> moduleAttributes) {
         List<ByteBuffer> allocatedBuffers = new ArrayList<>();
 
         try {
@@ -395,11 +326,11 @@ public class Pipeline {
 
                 if (!attrs.isEmpty()) {
                     ByteBuffer attrKVPointers = allocAndTrack(allocatedBuffers,
-                            attrs.size() * 2 * 8);
+                        attrs.size() * 2 * 8);
                     for (AttributeConfig attr : attrs) {
                         byte[] kBytes = attr.name.getBytes(StandardCharsets.UTF_8);
                         byte[] vBytes = (attr.value != null ? attr.value : "").getBytes(
-                                StandardCharsets.UTF_8);
+                            StandardCharsets.UTF_8);
 
                         ByteBuffer kBuf = allocAndTrack(allocatedBuffers, kBytes.length + 1);
                         kBuf.put(kBytes).put((byte) 0).flip();
@@ -452,397 +383,68 @@ public class Pipeline {
     }
 
     public static void assembleDefault() {
-        String defaultPresetName = processPresetName(Presets.RT_DLSSRR.key);
-        if (defaultPresetName == null) {
-            assembleBestAvailablePreset("Default preset is unavailable.");
-            return;
-        }
-        assemblePresetByKeyInternal(defaultPresetName);
-    }
-
-    public static void assembleDLSSRR() {
-        if (!isPresetAvailable(Presets.RT_DLSSRR.key)) {
-            assembleBestAvailablePreset("DLSS preset is unavailable.");
-            return;
-        }
-        assembleDLSSRRInternal();
-    }
-
-    private static void assembleDLSSRRInternal() {
         clear();
 
-        Module rayTracingModule = addModule(RAY_TRACING_MODULE_NAME);
+        // Default: RT + (optional DLSS) + ToneMapping + Post
+        boolean useDlss = Options.dlssDEnabled && isNativeModuleAvailable("render_pipeline.module.dlss.name");
 
-        Module dlssModule = addModule(DLSS_MODULE_NAME);
+        Module rayTracingModule = addModule("render_pipeline.module.ray_tracing.name");
 
-        Module toneMappingModule = addModule(TONE_MAPPING_MODULE_NAME);
+        Module toneMappingModule = addModule("render_pipeline.module.tone_mapping.name");
 
-        Module postRenderModule = addModule(POST_RENDER_MODULE_NAME);
+        Module postRenderModule = addModule("render_pipeline.module.post_render.name");
 
-        rayTracingModule.x = 100;
-        rayTracingModule.y = 220;
-        dlssModule.x = 380;
-        dlssModule.y = 220;
-        toneMappingModule.x = 660;
-        toneMappingModule.y = 140;
-        postRenderModule.x = 660;
-        postRenderModule.y = 300;
+        if (useDlss) {
+            Module dlssModule = addModule("render_pipeline.module.dlss.name");
 
-        INSTANCE.activePresetName = Presets.RT_DLSSRR.key;
-
-        connect(rayTracingModule.getOutputImageConfig("radiance"),
+            connect(rayTracingModule.getOutputImageConfig("radiance"),
                 dlssModule.getInputImageConfig("radiance"));
 
-        connect(rayTracingModule.getOutputImageConfig("diffuse_albedo_metallic"),
+            connect(rayTracingModule.getOutputImageConfig("diffuse_albedo_metallic"),
                 dlssModule.getInputImageConfig("diffuse_albedo_metallic"));
 
-        connect(rayTracingModule.getOutputImageConfig("specular_albedo"),
+            connect(rayTracingModule.getOutputImageConfig("specular_albedo"),
                 dlssModule.getInputImageConfig("specular_albedo"));
 
-        connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
+            connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
                 dlssModule.getInputImageConfig("normal_roughness"));
 
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
+            connect(rayTracingModule.getOutputImageConfig("motion_vector"),
                 dlssModule.getInputImageConfig("motion_vector"));
 
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
+            connect(rayTracingModule.getOutputImageConfig("linear_depth"),
                 dlssModule.getInputImageConfig("linear_depth"));
 
-        connect(rayTracingModule.getOutputImageConfig("specular_hit_depth"),
+            connect(rayTracingModule.getOutputImageConfig("specular_hit_depth"),
                 dlssModule.getInputImageConfig("specular_hit_depth"));
 
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
+            connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
                 dlssModule.getInputImageConfig("first_hit_depth"));
 
-        connect(dlssModule.getOutputImageConfig("processed"),
+            connect(rayTracingModule.getOutputImageConfig("diffuse_ray_dir_hit_dist"),
+                dlssModule.getInputImageConfig("diffuse_ray_dir_hit_dist"));
+
+            connect(rayTracingModule.getOutputImageConfig("specular_ray_dir_hit_dist"),
+                dlssModule.getInputImageConfig("specular_ray_dir_hit_dist"));
+
+            connect(dlssModule.getOutputImageConfig("processed"),
                 toneMappingModule.getInputImageConfig("denoised_radiance"));
 
-        connect(dlssModule.getOutputImageConfig("upscaled_first_hit_depth"),
+            connect(dlssModule.getOutputImageConfig("upscaled_first_hit_depth"),
                 postRenderModule.getInputImageConfig("first_hit_depth"));
-
-        connect(toneMappingModule.getOutputImageConfig("mapped_output"),
-                postRenderModule.getInputImageConfig("ldr_input"));
-
-        connectOutput(postRenderModule.getOutputImageConfig("post_rendered"));
-    }
-
-    public static void assembleNRDFSR() {
-        if (!isPresetAvailable(Presets.RT_NRD_FSR.key)) {
-            assembleBestAvailablePreset("NRD+FSR preset is unavailable.");
-            return;
-        }
-        assembleNRDFSRInternal();
-    }
-
-    public static void assembleNRDXESS() {
-        if (!isPresetAvailable(Presets.RT_NRD_XESS.key)) {
-            assembleBestAvailablePreset("NRD+XeSS preset is unavailable.");
-            return;
-        }
-        assembleNRDXESSInternal();
-    }
-
-    private static void assembleNRDFSRInternal() {
-        clear();
-
-        Module rayTracingModule = addModule(RAY_TRACING_MODULE_NAME);
-
-        Module denoiserModule = addModule(NRD_MODULE_NAME);
-
-        Module upscalerModule = addModule(FSR3_MODULE_NAME);
-
-        Module toneMappingModule = addModule(TONE_MAPPING_MODULE_NAME);
-
-        Module postRenderModule = addModule(POST_RENDER_MODULE_NAME);
-
-        rayTracingModule.x = 100;
-        rayTracingModule.y = 220;
-        denoiserModule.x = 380;
-        denoiserModule.y = 120;
-        upscalerModule.x = 660;
-        upscalerModule.y = 220;
-        toneMappingModule.x = 940;
-        toneMappingModule.y = 120;
-        postRenderModule.x = 940;
-        postRenderModule.y = 300;
-
-        INSTANCE.activePresetName = Presets.RT_NRD_FSR.key;
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_indirect_light"),
-                denoiserModule.getInputImageConfig("diffuse_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_specular"),
-                denoiserModule.getInputImageConfig("specular_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_direct_light"),
-                denoiserModule.getInputImageConfig("direct_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("diffuse_albedo_metallic"),
-                denoiserModule.getInputImageConfig("diffuse_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_albedo"),
-                denoiserModule.getInputImageConfig("specular_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
-                denoiserModule.getInputImageConfig("normal_roughness"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                denoiserModule.getInputImageConfig("motion_vector"));
-
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
-                denoiserModule.getInputImageConfig("linear_depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
-                denoiserModule.getInputImageConfig("diffuseHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_hit_depth"),
-                denoiserModule.getInputImageConfig("specularHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_clear"),
-                denoiserModule.getInputImageConfig("first_hit_clear"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_base_emission"),
-                denoiserModule.getInputImageConfig("first_hit_base_emission"));
-
-        connect(rayTracingModule.getOutputImageConfig("fog_image"),
-                denoiserModule.getInputImageConfig("fog_image"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_refraction"),
-                denoiserModule.getInputImageConfig("first_hit_refraction"));
-
-        connect(denoiserModule.getOutputImageConfig("denoised_radiance"),
-                upscalerModule.getInputImageConfig("color"));
-
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
-                upscalerModule.getInputImageConfig("depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
-                upscalerModule.getInputImageConfig("first_hit_depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                upscalerModule.getInputImageConfig("motion_vector"));
-
-        connect(upscalerModule.getOutputImageConfig("upscaled_radiance"),
-                toneMappingModule.getInputImageConfig("denoised_radiance"));
-        connect(upscalerModule.getOutputImageConfig("upscaled_first_hit_depth"),
-                postRenderModule.getInputImageConfig("first_hit_depth"));
-
-        connect(toneMappingModule.getOutputImageConfig("mapped_output"),
-                postRenderModule.getInputImageConfig("ldr_input"));
-
-        connectOutput(postRenderModule.getOutputImageConfig("post_rendered"));
-    }
-
-    private static void assembleNRDXESSInternal() {
-        clear();
-
-        Module rayTracingModule = addModule(RAY_TRACING_MODULE_NAME);
-
-        Module denoiserModule = addModule(NRD_MODULE_NAME);
-
-        Module upscalerModule = addModule(XESS_MODULE_NAME);
-
-        Module toneMappingModule = addModule(TONE_MAPPING_MODULE_NAME);
-
-        Module postRenderModule = addModule(POST_RENDER_MODULE_NAME);
-
-        rayTracingModule.x = 100;
-        rayTracingModule.y = 220;
-        denoiserModule.x = 380;
-        denoiserModule.y = 120;
-        upscalerModule.x = 660;
-        upscalerModule.y = 220;
-        toneMappingModule.x = 940;
-        toneMappingModule.y = 120;
-        postRenderModule.x = 940;
-        postRenderModule.y = 300;
-
-        INSTANCE.activePresetName = Presets.RT_NRD_XESS.key;
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_indirect_light"),
-                denoiserModule.getInputImageConfig("diffuse_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_specular"),
-                denoiserModule.getInputImageConfig("specular_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_direct_light"),
-                denoiserModule.getInputImageConfig("direct_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("diffuse_albedo_metallic"),
-                denoiserModule.getInputImageConfig("diffuse_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_albedo"),
-                denoiserModule.getInputImageConfig("specular_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
-                denoiserModule.getInputImageConfig("normal_roughness"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                denoiserModule.getInputImageConfig("motion_vector"));
-
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
-                denoiserModule.getInputImageConfig("linear_depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
-                denoiserModule.getInputImageConfig("diffuseHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_hit_depth"),
-                denoiserModule.getInputImageConfig("specularHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_clear"),
-                denoiserModule.getInputImageConfig("first_hit_clear"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_base_emission"),
-                denoiserModule.getInputImageConfig("first_hit_base_emission"));
-
-        connect(rayTracingModule.getOutputImageConfig("fog_image"),
-                denoiserModule.getInputImageConfig("fog_image"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_refraction"),
-                denoiserModule.getInputImageConfig("first_hit_refraction"));
-
-        connect(denoiserModule.getOutputImageConfig("denoised_radiance"),
-                upscalerModule.getInputImageConfig("color"));
-
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
-                upscalerModule.getInputImageConfig("depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
-                upscalerModule.getInputImageConfig("first_hit_depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                upscalerModule.getInputImageConfig("motion_vector"));
-
-        connect(upscalerModule.getOutputImageConfig("upscaled_radiance"),
-                toneMappingModule.getInputImageConfig("denoised_radiance"));
-        connect(upscalerModule.getOutputImageConfig("upscaled_first_hit_depth"),
-                postRenderModule.getInputImageConfig("first_hit_depth"));
-
-        connect(toneMappingModule.getOutputImageConfig("mapped_output"),
-                postRenderModule.getInputImageConfig("ldr_input"));
-
-        connectOutput(postRenderModule.getOutputImageConfig("post_rendered"));
-    }
-
-    public static void assembleNRD() {
-        if (!isPresetAvailable(Presets.RT_NRD.key)) {
-            assembleBestAvailablePreset("NRD preset is unavailable.");
-            return;
-        }
-        assembleNRDInternal();
-    }
-
-    private static void assembleNRDInternal() {
-        clear();
-
-        Module rayTracingModule = addModule(RAY_TRACING_MODULE_NAME);
-
-        Module denoiserModule = addModule(NRD_MODULE_NAME);
-
-        Module temporalAccumulationModule = addModule(TEMPORAL_ACCUMULATION_MODULE_NAME);
-
-        Module toneMappingModule = addModule(TONE_MAPPING_MODULE_NAME);
-
-        Module postRenderModule = addModule(POST_RENDER_MODULE_NAME);
-
-        rayTracingModule.x = 100;
-        rayTracingModule.y = 220;
-        denoiserModule.x = 380;
-        denoiserModule.y = 120;
-        temporalAccumulationModule.x = 660;
-        temporalAccumulationModule.y = 120;
-        toneMappingModule.x = 940;
-        toneMappingModule.y = 120;
-        postRenderModule.x = 940;
-        postRenderModule.y = 300;
-
-        INSTANCE.activePresetName = Presets.RT_NRD.key;
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_indirect_light"),
-                denoiserModule.getInputImageConfig("diffuse_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_specular"),
-                denoiserModule.getInputImageConfig("specular_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_diffuse_direct_light"),
-                denoiserModule.getInputImageConfig("direct_radiance"));
-
-        connect(rayTracingModule.getOutputImageConfig("diffuse_albedo_metallic"),
-                denoiserModule.getInputImageConfig("diffuse_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_albedo"),
-                denoiserModule.getInputImageConfig("specular_albedo"));
-
-        connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
-                denoiserModule.getInputImageConfig("normal_roughness"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                denoiserModule.getInputImageConfig("motion_vector"));
-
-        connect(rayTracingModule.getOutputImageConfig("linear_depth"),
-                denoiserModule.getInputImageConfig("linear_depth"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
-                denoiserModule.getInputImageConfig("diffuseHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("specular_hit_depth"),
-                denoiserModule.getInputImageConfig("specularHitDepthImage"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_clear"),
-                denoiserModule.getInputImageConfig("first_hit_clear"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_base_emission"),
-                denoiserModule.getInputImageConfig("first_hit_base_emission"));
-
-        connect(rayTracingModule.getOutputImageConfig("fog_image"),
-                denoiserModule.getInputImageConfig("fog_image"));
-
-        connect(rayTracingModule.getOutputImageConfig("first_hit_refraction"),
-                denoiserModule.getInputImageConfig("first_hit_refraction"));
-
-        connect(denoiserModule.getOutputImageConfig("denoised_radiance"),
-                temporalAccumulationModule.getInputImageConfig("color"));
-
-        connect(rayTracingModule.getOutputImageConfig("motion_vector"),
-                temporalAccumulationModule.getInputImageConfig("motion"));
-
-        connect(rayTracingModule.getOutputImageConfig("normal_roughness"),
-                temporalAccumulationModule.getInputImageConfig("normal_roughness"));
-
-        connect(temporalAccumulationModule.getOutputImageConfig("accumulated_radiance"),
+        } else {
+            // DLSS disabled/unavailable: feed raw ray tracing radiance to tone mapping.
+            connect(rayTracingModule.getOutputImageConfig("radiance"),
                 toneMappingModule.getInputImageConfig("denoised_radiance"));
 
-        connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
+            connect(rayTracingModule.getOutputImageConfig("first_hit_depth"),
                 postRenderModule.getInputImageConfig("first_hit_depth"));
+        }
 
         connect(toneMappingModule.getOutputImageConfig("mapped_output"),
-                postRenderModule.getInputImageConfig("ldr_input"));
+            postRenderModule.getInputImageConfig("ldr_input"));
 
         connectOutput(postRenderModule.getOutputImageConfig("post_rendered"));
-    }
-
-    private static void assemblePresetByKeyInternal(String presetName) {
-        if (Objects.equals(presetName, Presets.RT_DLSSRR.key)) {
-            assembleDLSSRRInternal();
-            return;
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD.key)) {
-            assembleNRDInternal();
-            return;
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD_FSR.key)) {
-            assembleNRDFSRInternal();
-            return;
-        }
-
-        if (Objects.equals(presetName, Presets.RT_NRD_XESS.key)) {
-            assembleNRDXESSInternal();
-            return;
-        }
-
-        throw new RuntimeException("Unsupported preset: " + presetName);
     }
 
     public static native void buildNative(long params);
@@ -853,255 +455,11 @@ public class Pipeline {
 
     public static native boolean isNativeModuleAvailable(String name);
 
-    public static Module getModuleByName(String name) {
-        if (name == null) {
-            return null;
-        }
-
-        for (Module module : INSTANCE.modules) {
-            if (Objects.equals(module.name, name)) {
-                return module;
-            }
-        }
-
-        return null;
-    }
-
-    public static String getModuleAttributeValue(String moduleName, String attributeName,
-        String fallback) {
-        Module module = getModuleByName(moduleName);
-        if (module == null || module.attributeConfigs == null || attributeName == null) {
-            return fallback;
-        }
-
-        for (AttributeConfig attributeConfig : module.attributeConfigs) {
-            if (!Objects.equals(attributeConfig.name, attributeName)) {
-                continue;
-            }
-
-            return attributeConfig.value != null ? attributeConfig.value : fallback;
-        }
-
-        return fallback;
-    }
-
-    public static int getModuleAttributeIntValue(String moduleName, String attributeName,
-        int fallback) {
-        String value = getModuleAttributeValue(moduleName, attributeName, null);
-        if (value == null) {
-            return fallback;
-        }
-
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
-
-    public static float getModuleAttributeFloatValue(String moduleName, String attributeName,
-        float fallback) {
-        String value = getModuleAttributeValue(moduleName, attributeName, null);
-        if (value == null) {
-            return fallback;
-        }
-
-        try {
-            return Float.parseFloat(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
-
-    public static boolean getModuleAttributeBooleanValue(String moduleName, String attributeName,
-        boolean fallback) {
-        String value = getModuleAttributeValue(moduleName, attributeName, null);
-        if (value == null) {
-            return fallback;
-        }
-
-        if (Objects.equals(value, "render_pipeline.true")) {
-            return true;
-        }
-        if (Objects.equals(value, "render_pipeline.false")) {
-            return false;
-        }
-
-        return Boolean.parseBoolean(value);
-    }
-
-    public static boolean setModuleAttributeValue(String moduleName, String attributeName,
-        String value) {
-        Module module = getModuleByName(moduleName);
-        if (module == null || module.attributeConfigs == null || attributeName == null) {
-            return false;
-        }
-
-        for (AttributeConfig attributeConfig : module.attributeConfigs) {
-            if (!Objects.equals(attributeConfig.name, attributeName)) {
-                continue;
-            }
-
-            String normalizedValue = value == null ? "" : value;
-            if (Objects.equals(attributeConfig.value, normalizedValue)) {
-                return false;
-            }
-
-            attributeConfig.value = normalizedValue;
-            return true;
-        }
-
-        return false;
-    }
-
-    public PipelineMode getMode() {
-        return mode;
-    }
-
-    public String getActivePresetName() {
-        return activePresetName;
-    }
-
-    public static PipelineMode getPipelineMode() {
-        return INSTANCE.mode;
-    }
-
-    public static String getActivePreset() {
-        return INSTANCE.activePresetName;
-    }
-
-    public static void switchToPipelineMode() {
-        if (INSTANCE.mode == PipelineMode.PIPELINE) {
-            return;
-        }
-
-        INSTANCE.mode = PipelineMode.PIPELINE;
-
-        savePipeline();
-
-        build();
-    }
-
-    public static void switchToPresetMode(String presetName) {
-        preparePresetMode(presetName);
-
-        savePipeline();
-        build();
-    }
-
-    public static void preparePresetMode(String presetName) {
-        List<PresetStoredModule> carryOverModules = capturePresetModules();
-
-        INSTANCE.mode = PipelineMode.PRESET;
-        String processedPresetName = processPresetName(presetName);
-
-        // should set preset name properly
-        assemblePreset(processedPresetName);
-
-        PipelineConfigStorage storage = loadConfigStorage();
-        if (storage != null && Objects.equals(storage.mode, PipelineMode.PRESET.name())
-                && Objects.equals(storage.presetName, INSTANCE.activePresetName)) {
-            applyPresetModuleOverrides(storage.presetModules);
-        }
-
-        applyPresetModuleOverrides(carryOverModules);
-    }
-
-    public static void assemblePreset(String presetName) {
-        String processedPresetName = processPresetName(presetName);
-        if (processedPresetName == null) {
-            assembleBestAvailablePreset("Requested preset is unavailable.");
-            return;
-        }
-
-        assemblePresetByKeyInternal(processedPresetName);
-    }
-
-    public static String processPresetName(String presetName) {
-        String requestedPresetName = presetName;
-        if (requestedPresetName == null || requestedPresetName.isEmpty()) {
-            requestedPresetName = Presets.RT_DLSSRR.key;
-        }
-
-        if (!Objects.equals(requestedPresetName, Presets.RT_DLSSRR.key)
-                && !Objects.equals(requestedPresetName, Presets.RT_NRD.key)
-                && !Objects.equals(requestedPresetName, Presets.RT_NRD_FSR.key)
-                && !Objects.equals(requestedPresetName, Presets.RT_NRD_XESS.key)) {
-            requestedPresetName = Presets.RT_DLSSRR.key;
-        }
-
-        if (isPresetAvailable(requestedPresetName)) {
-            return requestedPresetName;
-        }
-
-        return getBestAvailablePresetName();
-    }
-
-    private static void applyPresetModuleOverrides(List<PresetStoredModule> storedModules) {
-        if (storedModules == null || storedModules.isEmpty()) {
-            return;
-        }
-
-        for (PresetStoredModule storedModule : storedModules) {
-            if (storedModule == null || storedModule.entryName == null) {
-                continue;
-            }
-
-            for (Module module : INSTANCE.modules) {
-                if (!Objects.equals(module.name, storedModule.entryName)) {
-                    continue;
-                }
-
-                applyStoredAttributes(module, storedModule.attributes);
-            }
-        }
-    }
-
-    private static void applyStoredAttributes(Module module, List<StoredAttribute> storedAttributes) {
-        if (module == null || module.attributeConfigs == null || storedAttributes == null) {
-            return;
-        }
-
-        for (StoredAttribute storedAttribute : storedAttributes) {
-            if (storedAttribute == null || storedAttribute.name == null) {
-                continue;
-            }
-
-            for (int i = 0; i < module.attributeConfigs.size(); i++) {
-                var attributeConfig = module.attributeConfigs.get(i);
-
-                if (!Objects.equals(attributeConfig.name, storedAttribute.name)) {
-                    continue;
-                }
-                if (storedAttribute.type != null && !Objects.equals(attributeConfig.type, storedAttribute.type)) {
-                    continue;
-                }
-
-                attributeConfig.value = storedAttribute.value;
-                break;
-            }
-        }
-    }
-
     public static void savePipeline() {
         if (PIPELINE_CONFIG_PATH == null) {
             return;
         }
 
-        PipelineConfigStorage storage = new PipelineConfigStorage();
-        storage.mode = INSTANCE.mode.toString();
-        storage.presetName = INSTANCE.activePresetName;
-
-        if (INSTANCE.mode == PipelineMode.PIPELINE) {
-            storage.pipeline = capturePipelineStorage();
-        } else {
-            storage.presetModules = capturePresetModules();
-        }
-
-        writeConfigStorage(storage);
-    }
-
-    private static PipelineStorage capturePipelineStorage() {
         PipelineStorage pipelineStorage = new PipelineStorage();
         pipelineStorage.modules = new ArrayList<>();
         pipelineStorage.moduleConnections = new ArrayList<>();
@@ -1118,7 +476,21 @@ public class Pipeline {
             storedModule.entryName = module.name;
             storedModule.x = module.x;
             storedModule.y = module.y;
-            storedModule.attributes = captureAttributes(module);
+
+            storedModule.attributes = new ArrayList<>();
+            if (module.attributeConfigs != null) {
+                for (int attributeIndex = 0; attributeIndex < module.attributeConfigs.size();
+                    attributeIndex++) {
+                    var attributeConfig = module.attributeConfigs.get(attributeIndex);
+
+                    StoredAttribute storedAttribute = new StoredAttribute();
+                    storedAttribute.type = attributeConfig.type;
+                    storedAttribute.name = attributeConfig.name;
+                    storedAttribute.value = attributeConfig.value;
+
+                    storedModule.attributes.add(storedAttribute);
+                }
+            }
 
             pipelineStorage.modules.add(storedModule);
         }
@@ -1140,7 +512,8 @@ public class Pipeline {
                 continue;
             }
 
-            for (ImageConfig dstImageConfig : dstImageConfigs) {
+            for (int index = 0; index < dstImageConfigs.size(); index++) {
+                ImageConfig dstImageConfig = dstImageConfigs.get(index);
                 if (dstImageConfig == null || dstImageConfig.owner == null) {
                     continue;
                 }
@@ -1161,10 +534,10 @@ public class Pipeline {
         }
 
         storedConnections.sort(
-                Comparator.comparing((StoredConnection connection) -> connection.srcModuleId)
-                        .thenComparing(connection -> connection.srcImageName)
-                        .thenComparing(connection -> connection.dstModuleId)
-                        .thenComparing(connection -> connection.dstImageName));
+            Comparator.comparing((StoredConnection connection) -> connection.srcModuleId)
+                .thenComparing(connection -> connection.srcImageName)
+                .thenComparing(connection -> connection.dstModuleId)
+                .thenComparing(connection -> connection.dstImageName));
 
         pipelineStorage.moduleConnections.addAll(storedConnections);
 
@@ -1187,47 +560,13 @@ public class Pipeline {
         pipelineStorage.finalOutputModuleId = finalOutputModuleId;
         pipelineStorage.finalOutputImageName = finalOutputImageName;
 
-        return pipelineStorage;
-    }
-
-    private static List<StoredAttribute> captureAttributes(Module module) {
-        List<StoredAttribute> out = new ArrayList<>();
-        if (module == null || module.attributeConfigs == null) {
-            return out;
-        }
-
-        for (AttributeConfig attributeConfig : module.attributeConfigs) {
-            StoredAttribute storedAttribute = new StoredAttribute();
-            storedAttribute.type = attributeConfig.type;
-            storedAttribute.name = attributeConfig.name;
-            storedAttribute.value = attributeConfig.value;
-            out.add(storedAttribute);
-        }
-        return out;
-    }
-
-    private static List<PresetStoredModule> capturePresetModules() {
-        List<PresetStoredModule> list = new ArrayList<>();
-
-        for (Module module : INSTANCE.modules) {
-            PresetStoredModule storedModule = new PresetStoredModule();
-            storedModule.entryName = module.name;
-            storedModule.attributes = captureAttributes(module);
-            list.add(storedModule);
-        }
-
-        list.sort(Comparator.comparing(m -> m.entryName == null ? "" : m.entryName));
-        return list;
-    }
-
-    private static void writeConfigStorage(PipelineConfigStorage storage) {
         DumperOptions dumperOptions = new DumperOptions();
         dumperOptions.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         dumperOptions.setPrettyFlow(true);
         dumperOptions.setIndent(2);
 
         Yaml yaml = new Yaml(dumperOptions);
-        String yamlText = yaml.dump(storage);
+        String yamlText = yaml.dump(pipelineStorage);
 
         try {
             Files.createDirectories(PIPELINE_CONFIG_PATH.getParent());
@@ -1237,135 +576,81 @@ public class Pipeline {
         }
     }
 
-    private static PipelineConfigStorage loadConfigStorage() {
-        if (PIPELINE_CONFIG_PATH == null || !Files.exists(PIPELINE_CONFIG_PATH)) {
-            return null;
+    public static void loadPipeline() {
+        clear();
+
+        if (!Files.exists(PIPELINE_CONFIG_PATH)) {
+            assembleDefault();
+            savePipeline();
+            return;
         }
 
+        PipelineStorage pipelineStorage;
         try {
             String yamlText = Files.readString(PIPELINE_CONFIG_PATH, StandardCharsets.UTF_8);
 
             LoaderOptions loaderOptions = new LoaderOptions();
-            TagInspector tagInspector = tag -> tag.getClassName().startsWith("com.radiance.client.pipeline");
+            TagInspector tagInspector = tag -> tag.getClassName()
+                .startsWith("com.radiance.client.pipeline");
             loaderOptions.setTagInspector(tagInspector);
-
-            Constructor constructor = new Constructor(PipelineConfigStorage.class, loaderOptions);
+            Constructor constructor = new Constructor(PipelineStorage.class, loaderOptions);
             Yaml yaml = new Yaml(constructor);
 
-            PipelineConfigStorage storage = yaml.load(yamlText);
-            if (storage != null) {
-                storage.migrateLegacyFields();
-            }
-            return storage;
+            pipelineStorage = yaml.load(yamlText);
         } catch (Exception e) {
-            RadianceClient.LOGGER.error("Error while loading pipeline config.", e);
-            return null;
-        }
-    }
-
-    private static boolean hasUnavailableStoredModules(PipelineStorage pipelineStorage) {
-        if (pipelineStorage == null || pipelineStorage.modules == null) {
-            return true;
-        }
-
-        for (StoredModule storedModule : pipelineStorage.modules) {
-            if (storedModule == null || storedModule.entryName == null) {
-                continue;
-            }
-            if (!isModuleAvailable(storedModule.entryName)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static boolean hasStoredModule(PipelineStorage pipelineStorage, String moduleName) {
-        if (pipelineStorage == null || pipelineStorage.modules == null || moduleName == null) {
-            return false;
-        }
-
-        for (StoredModule storedModule : pipelineStorage.modules) {
-            if (storedModule == null || storedModule.entryName == null) {
-                continue;
-            }
-            if (Objects.equals(storedModule.entryName, moduleName)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static boolean hasStaleDlssState(PipelineStorage pipelineStorage) {
-        boolean savedPipelineHasDlss = hasStoredModule(pipelineStorage, DLSS_MODULE_NAME);
-        boolean currentDlssPresetActive = Options.shouldUseDlssPresetForCurrentQuality()
-            && isModuleAvailable(DLSS_MODULE_NAME);
-
-        if (savedPipelineHasDlss == currentDlssPresetActive) {
-            return false;
-        }
-
-        RadianceClient.LOGGER.warn(
-            "Stored pipeline DLSS state ({}) does not match the current quality preset expectation ({}). Rebuilding the default preset.",
-            savedPipelineHasDlss, currentDlssPresetActive);
-        return true;
-    }
-
-    private static boolean hasDisconnectedCurrentModuleInputs() {
-        Map<ImageConfig, ImageConfig> dstToSrcMap = new HashMap<>();
-        for (Map.Entry<ImageConfig, List<ImageConfig>> entry : INSTANCE.moduleConnections.entrySet()) {
-            ImageConfig src = entry.getKey();
-            for (ImageConfig dst : entry.getValue()) {
-                dstToSrcMap.put(dst, src);
-            }
-        }
-
-        for (Module module : INSTANCE.modules) {
-            for (ImageConfig inputConf : module.inputImageConfigs) {
-                if (!dstToSrcMap.containsKey(inputConf)) {
-                    RadianceClient.LOGGER.warn(
-                        "Stored pipeline has unconnected input '{}' on module '{}'. Rebuilding default pipeline.",
-                        inputConf.name, module.name);
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static void applyPipelineStorage(PipelineStorage pipelineStorage) {
-        if (pipelineStorage == null) {
+            RadianceClient.LOGGER.error("Error while loading pipeline.", e);
             assembleDefault();
+            savePipeline();
             return;
         }
 
-        if (hasUnavailableStoredModules(pipelineStorage)) {
-            RadianceClient.LOGGER.warn("Stored pipeline contains unavailable modules. Falling back to NRD+FSR.");
-            INSTANCE.mode = PipelineMode.PRESET;
-            assembleNRDFSR();
+        if (pipelineStorage == null || pipelineStorage.modules == null
+            || pipelineStorage.modules.isEmpty()) {
+            assembleDefault();
+            savePipeline();
+            RadianceClient.LOGGER.error("Pipeline is empty.");
             return;
         }
 
-        if (hasStaleDlssState(pipelineStorage)) {
-            INSTANCE.mode = PipelineMode.PRESET;
+        if (pipelineStorage.finalOutputModuleId == null
+            || pipelineStorage.finalOutputImageName == null) {
             assembleDefault();
+            savePipeline();
+            RadianceClient.LOGGER.error("Pipeline has no final output.");
+            return;
+        }
+
+        boolean dlssAvailable = Options.dlssDEnabled && isNativeModuleAvailable("render_pipeline.module.dlss.name");
+        boolean savedPipelineHasDlss = false;
+        for (int index = 0; index < pipelineStorage.modules.size(); index++) {
+            StoredModule storedModule = pipelineStorage.modules.get(index);
+
+            if (storedModule == null || storedModule.id == null || storedModule.entryName == null) {
+                continue;
+            }
+
+            if ("render_pipeline.module.dlss.name".equals(storedModule.entryName)) {
+                savedPipelineHasDlss = true;
+                break;
+            }
+        }
+
+        if (savedPipelineHasDlss != dlssAvailable) {
+            assembleDefault();
+            savePipeline();
+            RadianceClient.LOGGER.error(
+                "Saved pipeline DLSS state ({}) does not match current DLSS availability ({}). Rebuilding default pipeline.",
+                savedPipelineHasDlss, dlssAvailable);
             return;
         }
 
         clear();
 
-        if (pipelineStorage.modules == null || pipelineStorage.modules.isEmpty()
-                || pipelineStorage.finalOutputModuleId == null || pipelineStorage.finalOutputImageName == null) {
-            INSTANCE.mode = PipelineMode.PRESET;
-            assembleDefault();
-            return;
-        }
-
         Map<String, Module> idToModule = new HashMap<>();
 
-        for (StoredModule storedModule : pipelineStorage.modules) {
+        for (int index = 0; index < pipelineStorage.modules.size(); index++) {
+            StoredModule storedModule = pipelineStorage.modules.get(index);
+
             if (storedModule == null || storedModule.id == null || storedModule.entryName == null) {
                 continue;
             }
@@ -1374,7 +659,32 @@ public class Pipeline {
             module.x = storedModule.x;
             module.y = storedModule.y;
 
-            applyStoredAttributes(module, storedModule.attributes);
+            if (storedModule.attributes != null && module.attributeConfigs != null) {
+                for (int attributeIndex = 0; attributeIndex < storedModule.attributes.size();
+                    attributeIndex++) {
+                    StoredAttribute storedAttribute = storedModule.attributes.get(attributeIndex);
+                    if (storedAttribute == null || storedAttribute.name == null) {
+                        continue;
+                    }
+
+                    for (int moduleAttributeIndex = 0;
+                        moduleAttributeIndex < module.attributeConfigs.size();
+                        moduleAttributeIndex++) {
+                        var attributeConfig = module.attributeConfigs.get(moduleAttributeIndex);
+
+                        if (!Objects.equals(attributeConfig.name, storedAttribute.name)) {
+                            continue;
+                        }
+                        if (storedAttribute.type != null && !Objects.equals(attributeConfig.type,
+                            storedAttribute.type)) {
+                            continue;
+                        }
+
+                        attributeConfig.value = storedAttribute.value;
+                        break;
+                    }
+                }
+            }
 
             idToModule.put(storedModule.id, module);
         }
@@ -1387,29 +697,34 @@ public class Pipeline {
 
         Module finalModule = idToModule.get(pipelineStorage.finalOutputModuleId);
         if (finalModule == null) {
-            INSTANCE.mode = PipelineMode.PRESET;
             assembleDefault();
+            savePipeline();
+            RadianceClient.LOGGER.error("Final output module not found.");
             return;
         }
 
-        ImageConfig finalImageConfig = finalModule.getOutputImageConfig(pipelineStorage.finalOutputImageName);
+        ImageConfig finalImageConfig = finalModule.getOutputImageConfig(
+            pipelineStorage.finalOutputImageName);
         if (finalImageConfig == null) {
-            INSTANCE.mode = PipelineMode.PRESET;
             assembleDefault();
+            savePipeline();
+            RadianceClient.LOGGER.error("Final output image not found.");
             return;
         }
 
         finalImageConfig.finalOutput = true;
 
         if (pipelineStorage.moduleConnections != null) {
-            for (StoredConnection storedConnection : pipelineStorage.moduleConnections) {
+            for (int index = 0; index < pipelineStorage.moduleConnections.size(); index++) {
+                StoredConnection storedConnection = pipelineStorage.moduleConnections.get(index);
                 if (storedConnection == null) {
                     continue;
                 }
                 if (storedConnection.srcModuleId == null || storedConnection.dstModuleId == null) {
                     continue;
                 }
-                if (storedConnection.srcImageName == null || storedConnection.dstImageName == null) {
+                if (storedConnection.srcImageName == null
+                    || storedConnection.dstImageName == null) {
                     continue;
                 }
 
@@ -1420,61 +735,36 @@ public class Pipeline {
                     continue;
                 }
 
-                ImageConfig srcImageConfig = srcModule.getOutputImageConfig(storedConnection.srcImageName);
-                ImageConfig dstImageConfig = dstModule.getInputImageConfig(storedConnection.dstImageName);
-
-                if (srcImageConfig == null || dstImageConfig == null) {
-                    continue;
-                }
+                ImageConfig srcImageConfig = srcModule.getOutputImageConfig(
+                    storedConnection.srcImageName);
+                ImageConfig dstImageConfig = dstModule.getInputImageConfig(
+                    storedConnection.dstImageName);
 
                 connect(srcImageConfig, dstImageConfig);
             }
         }
-    }
 
-    public static void loadPipeline() {
-        try {
-            recollectNativeModules();
-        } catch (UnsatisfiedLinkError ignored) {
-            collectNativeModules();
-        }
-
-        PipelineConfigStorage storage = loadConfigStorage();
-
-        if (storage == null) {
-            INSTANCE.mode = PipelineMode.PRESET;
-            assembleDefault();
-            savePipeline();
-            return;
-        }
-
-        PipelineMode loadedMode = PipelineMode.fromString(storage.mode);
-        INSTANCE.mode = loadedMode;
-        if (storage.presetName != null && !storage.presetName.isEmpty()) {
-            INSTANCE.activePresetName = processPresetName(storage.presetName);
-        }
-
-        if (loadedMode == PipelineMode.PRESET) {
-            assemblePreset(INSTANCE.activePresetName);
-            applyPresetModuleOverrides(storage.presetModules);
-            build();
-            return;
-        }
-
-        if (storage.pipeline != null) {
-            applyPipelineStorage(storage.pipeline);
-            if (hasDisconnectedCurrentModuleInputs()) {
-                assembleDefault();
-                INSTANCE.mode = PipelineMode.PRESET;
-                savePipeline();
+        // Validate that all module inputs are connected (detect stale saved configs)
+        Map<ImageConfig, ImageConfig> dstToSrcCheck = new HashMap<>();
+        for (Map.Entry<ImageConfig, List<ImageConfig>> entry : INSTANCE.moduleConnections.entrySet()) {
+            for (ImageConfig dest : entry.getValue()) {
+                dstToSrcCheck.put(dest, entry.getKey());
             }
-            build();
-            return;
+        }
+        for (Module m : INSTANCE.modules) {
+            for (ImageConfig inputConf : m.inputImageConfigs) {
+                if (!dstToSrcCheck.containsKey(inputConf)) {
+                    RadianceClient.LOGGER.warn(
+                        "Saved pipeline has unconnected input '{}' on module '{}'. Rebuilding default pipeline.",
+                        inputConf.name, m.name);
+                    assembleDefault();
+                    savePipeline();
+                    return;
+                }
+            }
         }
 
-        // fallback
-        assembleDefault();
-        build();
+        savePipeline();
     }
 
     public Map<String, ModuleEntry> getModuleEntries() {
@@ -1489,63 +779,8 @@ public class Pipeline {
         return moduleConnections;
     }
 
-    public enum PipelineMode {
-        PIPELINE,
-        PRESET;
-
-        static PipelineMode fromString(String s) {
-            if (s == null) {
-                return PRESET;
-            }
-            try {
-                return PipelineMode.valueOf(s.toUpperCase(Locale.ROOT));
-            } catch (Exception ignored) {
-                return PRESET;
-            }
-        }
-    }
-
-    public static class PipelineConfigStorage {
-        // new format
-        public String mode;
-        public String presetName;
-        public PipelineStorage pipeline;
-        public List<PresetStoredModule> presetModules;
-
-        public List<StoredModule> modules;
-        public List<StoredConnection> moduleConnections;
-        public String finalOutputModuleId;
-        public String finalOutputImageName;
-
-        void migrateLegacyFields() {
-            if (pipeline != null) {
-                return;
-            }
-            if (modules == null || modules.isEmpty()) {
-                return;
-            }
-
-            PipelineStorage ps = new PipelineStorage();
-            ps.modules = modules;
-            ps.moduleConnections = moduleConnections != null ? moduleConnections : new ArrayList<>();
-            ps.finalOutputModuleId = finalOutputModuleId;
-            ps.finalOutputImageName = finalOutputImageName;
-
-            pipeline = ps;
-
-            // default mode for legacy, pipeline
-            if (mode == null) {
-                mode = "PIPELINE";
-            }
-        }
-    }
-
-    public static class PresetStoredModule {
-        public String entryName;
-        public List<StoredAttribute> attributes;
-    }
-
     public static class PipelineStorage {
+
         public List<StoredModule> modules;
         public List<StoredConnection> moduleConnections;
         public String finalOutputModuleId;
@@ -1553,6 +788,7 @@ public class Pipeline {
     }
 
     public static class StoredModule {
+
         public String id;
         public String entryName;
         public double x;
@@ -1561,12 +797,14 @@ public class Pipeline {
     }
 
     public static class StoredAttribute {
+
         public String type;
         public String name;
         public String value;
     }
 
     public static class StoredConnection {
+
         public String srcModuleId;
         public String srcImageName;
         public String dstModuleId;

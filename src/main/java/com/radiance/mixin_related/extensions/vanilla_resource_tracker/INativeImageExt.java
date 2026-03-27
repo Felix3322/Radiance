@@ -5,23 +5,35 @@ import net.minecraft.util.Identifier;
 
 public interface INativeImageExt {
 
-    int radiance$getTargetID();
+    int neoVoxelRT$getTargetID();
 
-    void radiance$setTargetID(int id);
+    void neoVoxelRT$setTargetID(int id);
 
-    Identifier radiance$getIdentifier();
+    Identifier neoVoxelRT$getIdentifier();
 
-    void radiance$setIdentifier(Identifier id);
+    void neoVoxelRT$setIdentifier(Identifier id);
 
-    NativeImage radiance$getSpecularNativeImage();
+    NativeImage neoVoxelRT$getSpecularNativeImage();
 
-    void radiance$setSpecularNativeImage(NativeImage image);
+    void neoVoxelRT$setSpecularNativeImage(NativeImage image);
 
-    NativeImage radiance$getNormalNativeImage();
+    NativeImage neoVoxelRT$getNormalNativeImage();
 
-    void radiance$setNormalNativeImage(NativeImage image);
+    void neoVoxelRT$setNormalNativeImage(NativeImage image);
 
-    NativeImage radiance$getFlagNativeImage();
+    NativeImage neoVoxelRT$getFlagNativeImage();
 
-    void radiance$setFlagNativeImage(NativeImage image);
+    void neoVoxelRT$setFlagNativeImage(NativeImage image);
+
+    int neoVoxelRT$getSpecularUploadedLevelsMask();
+
+    void neoVoxelRT$setSpecularUploadedLevelsMask(int uploadedLevelsMask);
+
+    int neoVoxelRT$getNormalUploadedLevelsMask();
+
+    void neoVoxelRT$setNormalUploadedLevelsMask(int uploadedLevelsMask);
+
+    int neoVoxelRT$getFlagUploadedLevelsMask();
+
+    void neoVoxelRT$setFlagUploadedLevelsMask(int uploadedLevelsMask);
 }
