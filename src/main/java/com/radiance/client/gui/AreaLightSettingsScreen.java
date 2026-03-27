@@ -13,7 +13,6 @@ import net.minecraft.client.gui.screen.option.GameOptionsScreen;
 import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 
 
 public class AreaLightSettingsScreen extends GameOptionsScreen {
@@ -93,13 +92,22 @@ public class AreaLightSettingsScreen extends GameOptionsScreen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
-        // Hint line below the title
-        int hintY = 26;
-        int centerX = this.width / 2;
-        context.drawCenteredTextWithShadow(
-            this.textRenderer,
-            Text.literal(Formatting.GRAY + "Ctrl+Click a slider to type a value  \u2502  Shift+Click to reset to default"),
-            centerX, hintY, 0xFFFFFF);
+        // Breadcrumb
+        RadianceTheme.drawOutlinedText(context, this.textRenderer,
+            Text.literal("Radiance > Lighting > Area Lights"), 20, 26, RadianceTheme.textSecondary);
+
+        // Hint line below the breadcrumb
+        int hintY = 38;
+        RadianceTheme.drawCenteredOutlinedText(context, this.textRenderer,
+            Text.literal("Ctrl+Click a slider to type a value  \u2502  Shift+Click to reset to default"),
+            this.width / 2, hintY, RadianceTheme.textSecondary);
+    }
+
+    @Override
+    protected void initBody() {
+        this.body = this.layout.addBody(
+            new WideOptionListWidget(this.client, this.width, this));
+        addOptions();
     }
 
     @Override
@@ -119,7 +127,7 @@ public class AreaLightSettingsScreen extends GameOptionsScreen {
 
         ResettableSliderWidget rangeSlider = new ResettableSliderWidget(
             0, 0, 150, 20,
-            8, 512, Options.areaLightRange, 48,
+            8, 512, Options.areaLightRange, 128,
             v -> getGenericValueText(
                 Text.translatable(Options.AREA_LIGHT_RANGE_KEY),
                 Text.literal(v + " blocks")),
@@ -170,7 +178,7 @@ public class AreaLightSettingsScreen extends GameOptionsScreen {
         // Row 7: W Clamp
         ResettableSliderWidget wClampSlider = new ResettableSliderWidget(
             0, 0, 150, 20,
-            10, 200, Options.restirWClamp, 50,
+            10, 200, Options.restirWClamp, 30,
             v -> getGenericValueText(
                 Text.translatable(Options.RESTIR_W_CLAMP_KEY),
                 Text.literal(String.valueOf(v))),

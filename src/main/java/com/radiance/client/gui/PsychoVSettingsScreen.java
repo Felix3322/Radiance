@@ -5,6 +5,7 @@ import static net.minecraft.client.option.GameOptions.getGenericValueText;
 import com.radiance.client.option.Options;
 import com.radiance.client.util.CategoryVideoOptionEntry;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.option.GameOptionsScreen;
 import net.minecraft.text.Text;
@@ -17,6 +18,20 @@ public class PsychoVSettingsScreen extends GameOptionsScreen {
         super(parent, MinecraftClient.getInstance().options,
             Text.translatable(Options.CATEGORY_PSYCHO));
         this.parentScreen = parent;
+    }
+
+    @Override
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        super.render(context, mouseX, mouseY, delta);
+        RadianceTheme.drawOutlinedText(context, this.textRenderer,
+            Text.literal("Radiance > Light & Color > PsychoV"), 20, 26, RadianceTheme.textSecondary);
+    }
+
+    @Override
+    protected void initBody() {
+        this.body = this.layout.addBody(
+            new WideOptionListWidget(this.client, this.width, this));
+        addOptions();
     }
 
     @Override
@@ -62,7 +77,7 @@ public class PsychoVSettingsScreen extends GameOptionsScreen {
         // Purity / Saturation (0-300 -> 0.0 to 3.0)
         ResettableSliderWidget puritySlider = new ResettableSliderWidget(
             0, 0, 150, 20,
-            0, 300, Options.psychoPurityPercent, 100,
+            0, 300, Options.psychoPurityPercent, 105,
             v -> getGenericValueText(
                 Text.translatable(Options.PSYCHO_PURITY_KEY),
                 Text.literal(String.format("%.2f", v / 100.0))),
@@ -82,7 +97,7 @@ public class PsychoVSettingsScreen extends GameOptionsScreen {
         // Hue Restore (0-100 -> 0.0 to 1.0)
         ResettableSliderWidget hueRestoreSlider = new ResettableSliderWidget(
             0, 0, 150, 20,
-            0, 100, Options.psychoHueRestorePercent, 100,
+            0, 100, Options.psychoHueRestorePercent, 0,
             v -> getGenericValueText(
                 Text.translatable(Options.PSYCHO_HUE_RESTORE_KEY),
                 Text.literal(String.format("%.2f", v / 100.0))),
@@ -110,7 +125,7 @@ public class PsychoVSettingsScreen extends GameOptionsScreen {
         // White Curve Mode (0 = Neutwo, 1 = Naka-Rushton)
         ResettableSliderWidget whiteCurveSlider = new ResettableSliderWidget(
             0, 0, 150, 20,
-            0, 1, Options.psychoWhiteCurve, 0,
+            0, 1, Options.psychoWhiteCurve, 1,
             v -> {
                 String[] labels = {"Neutwo", "Naka-Rushton"};
                 return getGenericValueText(

@@ -17,25 +17,32 @@ public class ScreenMixins {
 
     }
 
-    @Inject(method = "renderDarkening(Lnet/minecraft/client/gui/DrawContext;)V",
-        at = @At("HEAD"), cancellable = true)
+    /**
+     * Skip the dark overlay (renderDarkening) for Radiance settings screens
+     * so the game view is visible behind the menu without a vignette/tint.
+     */
+    @Inject(method = "renderDarkening(Lnet/minecraft/client/gui/DrawContext;)V", at = @At("HEAD"), cancellable = true)
     private void skipDarkeningForRadianceScreens(DrawContext context, CallbackInfo ci) {
         if (((Object) this).getClass().getPackageName().startsWith("com.radiance.client.gui")) {
             ci.cancel();
         }
     }
 
-    @Inject(method = "renderDarkening(Lnet/minecraft/client/gui/DrawContext;IIII)V",
-        at = @At("HEAD"), cancellable = true)
-    private void skipDarkening4ArgForRadianceScreens(DrawContext context, int x, int y, int w,
-        int h, CallbackInfo ci) {
+    /**
+     * Also cancel the 4-arg variant called directly by some code paths.
+     */
+    @Inject(method = "renderDarkening(Lnet/minecraft/client/gui/DrawContext;IIII)V", at = @At("HEAD"), cancellable = true)
+    private void skipDarkening4ArgForRadianceScreens(DrawContext context, int x, int y, int w, int h, CallbackInfo ci) {
         if (((Object) this).getClass().getPackageName().startsWith("com.radiance.client.gui")) {
             ci.cancel();
         }
     }
 
+    /**
+     * Also cancel renderInGameBackground which draws a separate dark gradient.
+     */
     @Inject(method = "renderInGameBackground", at = @At("HEAD"), cancellable = true)
-    private void skipInGameBackgroundForRadianceScreens(DrawContext context, CallbackInfo ci) {
+    private void skipInGameBgForRadianceScreens(DrawContext context, CallbackInfo ci) {
         if (((Object) this).getClass().getPackageName().startsWith("com.radiance.client.gui")) {
             ci.cancel();
         }

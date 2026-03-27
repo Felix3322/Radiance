@@ -1,6 +1,5 @@
 package com.radiance.mixins.vanilla_resource_tracker;
 
-import com.radiance.client.proxy.vulkan.TextureProxy;
 import com.radiance.client.texture.IdentifierInputStream;
 import com.radiance.mixin_related.extensions.vanilla_resource_tracker.INativeImageExt;
 import java.io.InputStream;
@@ -14,13 +13,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(NativeImage.class)
 public abstract class NativeImageMixins implements INativeImageExt {
-
-    @Unique
-    private static final int RADIANCE_ALPHA_FULLY_OPAQUE = 0;
-    @Unique
-    private static final int RADIANCE_ALPHA_FULLY_TRANSPARENT = 1;
-    @Unique
-    private static final int RADIANCE_ALPHA_MIXED = 2;
 
     @Unique
     private int targetID = -1;
@@ -55,7 +47,7 @@ public abstract class NativeImageMixins implements INativeImageExt {
 
         if (stream instanceof IdentifierInputStream) {
             Identifier identifier = ((IdentifierInputStream) stream).getResourceId();
-            ((INativeImageExt) (Object) nativeImage).radiance$setIdentifier(identifier);
+            ((INativeImageExt) (Object) nativeImage).neoVoxelRT$setIdentifier(identifier);
             cir.setReturnValue(nativeImage);
         } else {
             cir.setReturnValue(nativeImage);
@@ -63,57 +55,54 @@ public abstract class NativeImageMixins implements INativeImageExt {
     }
 
     @Override
-    public int radiance$getTargetID() {
+    public int neoVoxelRT$getTargetID() {
         return targetID;
     }
 
     @Override
-    public void radiance$setTargetID(int id) {
+    public void neoVoxelRT$setTargetID(int id) {
         this.targetID = id;
-        if (id > 0) {
-            TextureProxy.setTextureAlphaClass(id, radiance$detectAlphaClass());
-        }
     }
 
     @Override
-    public Identifier radiance$getIdentifier() {
+    public Identifier neoVoxelRT$getIdentifier() {
         return identifier;
     }
 
     @Override
-    public void radiance$setIdentifier(Identifier id) {
+    public void neoVoxelRT$setIdentifier(Identifier id) {
         this.identifier = id;
     }
 
     @Override
-    public NativeImage radiance$getSpecularNativeImage() {
+    public NativeImage neoVoxelRT$getSpecularNativeImage() {
         return specularImage;
     }
 
     @Override
-    public void radiance$setSpecularNativeImage(NativeImage image) {
+    public void neoVoxelRT$setSpecularNativeImage(NativeImage image) {
         this.specularImage = image;
         this.specularUploadedLevelsMask = 0;
     }
 
     @Override
-    public NativeImage radiance$getNormalNativeImage() {
+    public NativeImage neoVoxelRT$getNormalNativeImage() {
         return normalImage;
     }
 
     @Override
-    public void radiance$setNormalNativeImage(NativeImage image) {
+    public void neoVoxelRT$setNormalNativeImage(NativeImage image) {
         this.normalImage = image;
         this.normalUploadedLevelsMask = 0;
     }
 
     @Override
-    public NativeImage radiance$getFlagNativeImage() {
+    public NativeImage neoVoxelRT$getFlagNativeImage() {
         return flagImage;
     }
 
     @Override
-    public void radiance$setFlagNativeImage(NativeImage image) {
+    public void neoVoxelRT$setFlagNativeImage(NativeImage image) {
         this.flagImage = image;
         this.flagUploadedLevelsMask = 0;
     }
@@ -146,39 +135,5 @@ public abstract class NativeImageMixins implements INativeImageExt {
     @Override
     public void neoVoxelRT$setFlagUploadedLevelsMask(int uploadedLevelsMask) {
         this.flagUploadedLevelsMask = uploadedLevelsMask;
-    }
-
-    @Unique
-    private int radiance$detectAlphaClass() {
-        NativeImage self = (NativeImage) (Object) this;
-        int width = self.getWidth();
-        int height = self.getHeight();
-        boolean sawOpaque = false;
-        boolean sawTransparent = false;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int alpha = (self.getColorArgb(x, y) >>> 24) & 0xFF;
-                if (alpha >= 250) {
-                    sawOpaque = true;
-                } else if (alpha <= 5) {
-                    sawTransparent = true;
-                } else {
-                    return RADIANCE_ALPHA_MIXED;
-                }
-
-                if (sawOpaque && sawTransparent) {
-                    return RADIANCE_ALPHA_MIXED;
-                }
-            }
-        }
-
-        if (sawOpaque) {
-            return RADIANCE_ALPHA_FULLY_OPAQUE;
-        }
-        if (sawTransparent) {
-            return RADIANCE_ALPHA_FULLY_TRANSPARENT;
-        }
-        return RADIANCE_ALPHA_MIXED;
     }
 }
