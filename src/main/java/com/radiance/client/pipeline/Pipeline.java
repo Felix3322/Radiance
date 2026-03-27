@@ -2,6 +2,7 @@ package com.radiance.client.pipeline;
 
 import com.radiance.client.RadianceClient;
 import com.radiance.client.constant.VulkanConstants;
+import com.radiance.client.option.Options;
 import com.radiance.client.pipeline.config.AttributeConfig;
 import com.radiance.client.pipeline.config.ImageConfig;
 
@@ -848,6 +849,8 @@ public class Pipeline {
 
     public static native void collectNativeModules();
 
+    public static native void recollectNativeModules();
+
     public static native boolean isNativeModuleAvailable(String name);
 
     public static Module getModuleByName(String name) {
@@ -1277,6 +1280,38 @@ public class Pipeline {
         return false;
     }
 
+    private static boolean hasStoredModule(PipelineStorage pipelineStorage, String moduleName) {
+        if (pipelineStorage == null || pipelineStorage.modules == null || moduleName == null) {
+            return false;
+        }
+
+        for (StoredModule storedModule : pipelineStorage.modules) {
+            if (storedModule == null || storedModule.entryName == null) {
+                continue;
+            }
+            if (Objects.equals(storedModule.entryName, moduleName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean hasStaleDlssState(PipelineStorage pipelineStorage) {
+        boolean savedPipelineHasDlss = hasStoredModule(pipelineStorage, DLSS_MODULE_NAME);
+        boolean currentDlssPresetActive = Options.shouldUseDlssPresetForCurrentQuality()
+            && isModuleAvailable(DLSS_MODULE_NAME);
+
+        if (savedPipelineHasDlss == currentDlssPresetActive) {
+            return false;
+        }
+
+        RadianceClient.LOGGER.warn(
+            "Stored pipeline DLSS state ({}) does not match the current quality preset expectation ({}). Rebuilding the default preset.",
+            savedPipelineHasDlss, currentDlssPresetActive);
+        return true;
+    }
+
     private static boolean hasDisconnectedCurrentModuleInputs() {
         Map<ImageConfig, ImageConfig> dstToSrcMap = new HashMap<>();
         for (Map.Entry<ImageConfig, List<ImageConfig>> entry : INSTANCE.moduleConnections.entrySet()) {
@@ -1308,7 +1343,14 @@ public class Pipeline {
 
         if (hasUnavailableStoredModules(pipelineStorage)) {
             RadianceClient.LOGGER.warn("Stored pipeline contains unavailable modules. Falling back to NRD+FSR.");
+            INSTANCE.mode = PipelineMode.PRESET;
             assembleNRDFSR();
+            return;
+        }
+
+        if (hasStaleDlssState(pipelineStorage)) {
+            INSTANCE.mode = PipelineMode.PRESET;
+            assembleDefault();
             return;
         }
 
@@ -1316,6 +1358,7 @@ public class Pipeline {
 
         if (pipelineStorage.modules == null || pipelineStorage.modules.isEmpty()
                 || pipelineStorage.finalOutputModuleId == null || pipelineStorage.finalOutputImageName == null) {
+            INSTANCE.mode = PipelineMode.PRESET;
             assembleDefault();
             return;
         }
@@ -1344,12 +1387,14 @@ public class Pipeline {
 
         Module finalModule = idToModule.get(pipelineStorage.finalOutputModuleId);
         if (finalModule == null) {
+            INSTANCE.mode = PipelineMode.PRESET;
             assembleDefault();
             return;
         }
 
         ImageConfig finalImageConfig = finalModule.getOutputImageConfig(pipelineStorage.finalOutputImageName);
         if (finalImageConfig == null) {
+            INSTANCE.mode = PipelineMode.PRESET;
             assembleDefault();
             return;
         }
@@ -1388,6 +1433,12 @@ public class Pipeline {
     }
 
     public static void loadPipeline() {
+        try {
+            recollectNativeModules();
+        } catch (UnsatisfiedLinkError ignored) {
+            collectNativeModules();
+        }
+
         PipelineConfigStorage storage = loadConfigStorage();
 
         if (storage == null) {

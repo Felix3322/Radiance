@@ -444,7 +444,7 @@ public class Options {
     }
 
     public static void setReflexEnabled(boolean enabled, boolean write) {
-        if (enabled && !isReflexSupported()) {
+        if (write && enabled && !isReflexSupported()) {
             RadianceClient.LOGGER.warn(
                 "NVIDIA Reflex was requested, but the current runtime does not expose Streamline Reflex support. Keeping the option disabled.");
             enabled = false;
@@ -561,6 +561,14 @@ public class Options {
                 Presets.RT_NRD.key,
                 Presets.RT_DLSSRR.key);
         };
+    }
+
+    public static String getPreferredPresetForCurrentQuality() {
+        return selectPresetForQuality(QualityLevel.fromId(qualityLevel));
+    }
+
+    public static boolean shouldUseDlssPresetForCurrentQuality() {
+        return Objects.equals(getPreferredPresetForCurrentQuality(), Presets.RT_DLSSRR.key);
     }
 
     private static String firstAvailablePreset(String... presetNames) {
