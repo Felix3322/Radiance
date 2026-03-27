@@ -36,7 +36,7 @@
   "options.video.denoiser_mode.nrd": "NRD",
   "options.video.denoiser_mode.temporal": "Temporal Accumulation",
   "options.video.hdr_output": "HDR Output",
-  "options.video.dlss_frame_generation": "DLSS Frame Generation (Experimental)",
+  "options.video.dlss_frame_generation": "DLSS Frame Generation (NVIDIA/NGX, Experimental)",
   "options.video.ray_bounces": "Ray Bounces",
   "options.video.chunk_building_batch_size": "Amount of chunks to build in a single submit",
   "options.video.chunk_building_total_batches": "Amount of building chunk batches",

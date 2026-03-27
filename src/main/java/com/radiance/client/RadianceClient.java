@@ -47,9 +47,15 @@ public class RadianceClient implements ClientModInitializer {
             Path dllTargetPath = radianceDir.resolve("core.dll");
             Path dllResourcePath = Path.of("core.dll");
             copyFileFromResource(dllTargetPath, dllResourcePath);
+            Path ngxDlssPath = radianceDir.resolve("nvngx_dlss.dll");
+            Path ngxDlssdPath = radianceDir.resolve("nvngx_dlssd.dll");
+            Path ngxDlssgPath = radianceDir.resolve("nvngx_dlssg.dll");
             Path xessPath = radianceDir.resolve("libxess.dll");
             Path xessDx11Path = radianceDir.resolve("libxess_dx11.dll");
             Path xessFgPath = radianceDir.resolve("libxess_fg.dll");
+            copyOptionalFileFromResource(ngxDlssPath, Path.of("nvngx_dlss.dll"));
+            copyOptionalFileFromResource(ngxDlssdPath, Path.of("nvngx_dlssd.dll"));
+            copyOptionalFileFromResource(ngxDlssgPath, Path.of("nvngx_dlssg.dll"));
             copyOptionalFileFromResource(xessPath, Path.of("libxess.dll"));
             // currently not used, can be used later for fg
             copyOptionalFileFromResource(xessDx11Path, Path.of("libxess_dx11.dll"));

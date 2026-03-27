@@ -49,6 +49,7 @@ tasks.register("extractRadianceWindowsRuntime") {
         copy {
             from(zipTree(radianceWindowsJar))
             include "core.dll"
+            include "nvngx_*.dll"
             include "libxess*.dll"
             into outputDir
         }
@@ -116,6 +117,7 @@ processResources {
     def localRuntimeAvailable =
         new File(mainResourcesDir, "core.dll").exists()
             || new File(mainResourcesDir, "libcore.so").exists()
+            || new File(mainResourcesDir, "nvngx_dlssg.dll").exists()
             || new File(mainResourcesDir, "libxess.dll").exists()
     if (radianceRuntimeDir != null) {
         if (radianceRuntimeDir.exists()) {
@@ -140,12 +142,14 @@ processResources {
     if (runtimeDirectorySource != null && !runtimeSourceMatchesMainResources) {
         exclude "core.dll"
         exclude "libcore.so"
+        exclude "nvngx_*.dll"
         exclude "libxess*.dll"
         exclude "shaders/**"
 
         from(runtimeDirectorySource) {
             include "core.dll"
             include "libcore.so"
+            include "nvngx_*.dll"
             include "libxess*.dll"
             include "shaders/**"
         }

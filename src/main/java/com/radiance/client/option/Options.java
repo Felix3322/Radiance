@@ -372,8 +372,14 @@ public class Options {
     }
 
     public native static void nativeSetDlssFrameGeneration(boolean dlssFrameGeneration, boolean write);
+    public native static boolean nativeHasDlssFrameGenerationAvailable();
 
     public static void setDlssFrameGeneration(boolean dlssFrameGeneration, boolean write) {
+        if (write && dlssFrameGeneration && !nativeHasDlssFrameGenerationAvailable()) {
+            RadianceClient.LOGGER.warn(
+                "DLSS Frame Generation was requested, but the current system/runtime does not expose it. Keeping the option disabled.");
+            dlssFrameGeneration = false;
+        }
         Options.dlssFrameGeneration = dlssFrameGeneration;
         nativeSetDlssFrameGeneration(dlssFrameGeneration, write);
         if (write) {
