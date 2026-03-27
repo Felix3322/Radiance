@@ -1,6 +1,7 @@
 package com.radiance.client.proxy.world;
 
 import com.radiance.client.pipeline.Pipeline;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderPhase;
 
@@ -68,6 +69,14 @@ final class RayTracingTuning {
         "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode.greedy_meshing";
     private static final String VALUE_TERRAIN_MESHING_COPLANAR =
         "render_pipeline.module.ray_tracing.attribute.terrain_meshing_mode.coplanar_merge";
+    private static final double FAR_FIELD_VISIBLE_FEATURE_PIXELS = 1.25;
+    private static final double FAR_FIELD_CUTOUT_FEATURE_BLOCKS = 2.0;
+    private static final double FAR_FIELD_DEFAULT_FEATURE_BLOCKS = 1.0;
+    private static final double FAR_FIELD_HALF_FOV_DEGREES = 35.0;
+    private static final double FAR_FIELD_INTERVAL_RATIO_MEDIUM = 1.5;
+    private static final double FAR_FIELD_INTERVAL_RATIO_FAR = 2.5;
+    private static final double FAR_FIELD_INTERVAL_RATIO_VERY_FAR = 4.0;
+    private static final double FAR_FIELD_INTERVAL_RATIO_EXTREME = 6.0;
 
     private RayTracingTuning() {
     }
@@ -105,11 +114,15 @@ final class RayTracingTuning {
             return ChunkGeometryRoute.BLAS;
         }
 
+        boolean preserveVisibleFarFieldSpecialGeometry =
+            farField && shouldPreserveVisibleFarFieldSpecialGeometry(renderLayer, distanceChunks);
         if (farField && shouldDropFarFieldSpecialGeometry()) {
-            return ChunkGeometryRoute.DROP;
+            return preserveVisibleFarFieldSpecialGeometry ? ChunkGeometryRoute.BLAS
+                : ChunkGeometryRoute.DROP;
         }
         if (coarseWorldRepresentation && farField && !isReflectiveSpecialLayer(renderLayer)) {
-            return ChunkGeometryRoute.DROP;
+            return preserveVisibleFarFieldSpecialGeometry ? ChunkGeometryRoute.BLAS
+                : ChunkGeometryRoute.DROP;
         }
 
         return isReflectiveSpecialLayer(renderLayer) ? ChunkGeometryRoute.SPECIAL_REFLECTIVE
@@ -194,8 +207,9 @@ final class RayTracingTuning {
             Pipeline.getModuleAttributeIntValue(RAY_TRACING_MODULE,
                 ATTR_TERRAIN_UPDATE_INTERVAL_FRAMES, 1));
 
+        int farFieldStartDistanceChunks = getFarFieldStartDistanceChunks();
         FarFieldGeometryMode farFieldGeometryMode = getFarFieldGeometryMode();
-        if (distanceChunks < getFarFieldStartDistanceChunks()) {
+        if (distanceChunks < farFieldStartDistanceChunks) {
             return interval;
         }
 
@@ -220,7 +234,10 @@ final class RayTracingTuning {
             case SIZE_4 -> 2;
             case SIZE_8 -> 3;
         };
-        return Math.max(1, Math.min(512, farFieldInterval * coarseMultiplier));
+        int distanceMultiplier = farFieldDistanceUpdateMultiplier(distanceChunks,
+            farFieldStartDistanceChunks);
+        return Math.max(1, Math.min(1024,
+            farFieldInterval * coarseMultiplier * distanceMultiplier));
     }
 
     static int entityUpdateIntervalFrames() {
@@ -424,6 +441,41 @@ final class RayTracingTuning {
     static boolean isCutoutLayer(RenderLayer renderLayer) {
         String name = renderLayer.name;
         return name.contains("cutout") || name.contains("tripwire");
+    }
+
+    private static boolean shouldPreserveVisibleFarFieldSpecialGeometry(RenderLayer renderLayer,
+        double distanceChunks) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getWindow() == null) {
+            return true;
+        }
+
+        double framebufferHeight = Math.max(1.0, client.getWindow().getFramebufferHeight());
+        double distanceBlocks = Math.max(1.0, distanceChunks * 16.0);
+        double featureBlocks = isCutoutLayer(renderLayer) ? FAR_FIELD_CUTOUT_FEATURE_BLOCKS
+            : FAR_FIELD_DEFAULT_FEATURE_BLOCKS;
+        double projectedPixels =
+            framebufferHeight * featureBlocks / (2.0 * distanceBlocks * Math.tan(
+                Math.toRadians(FAR_FIELD_HALF_FOV_DEGREES)));
+        return projectedPixels >= FAR_FIELD_VISIBLE_FEATURE_PIXELS;
+    }
+
+    private static int farFieldDistanceUpdateMultiplier(double distanceChunks,
+        int farFieldStartDistanceChunks) {
+        double distanceRatio = distanceChunks / Math.max(1.0, farFieldStartDistanceChunks);
+        if (distanceRatio >= FAR_FIELD_INTERVAL_RATIO_EXTREME) {
+            return 12;
+        }
+        if (distanceRatio >= FAR_FIELD_INTERVAL_RATIO_VERY_FAR) {
+            return 8;
+        }
+        if (distanceRatio >= FAR_FIELD_INTERVAL_RATIO_FAR) {
+            return 4;
+        }
+        if (distanceRatio >= FAR_FIELD_INTERVAL_RATIO_MEDIUM) {
+            return 2;
+        }
+        return 1;
     }
 
     private static boolean shouldDropFarFieldSpecialGeometry() {

@@ -71,6 +71,9 @@ public class ChunkProxy {
     private static final Object specialChunkGeometryLock = new Object();
     private static final int numNormalChunkRebuildThreads = 1;
     private static final int numImportantChunkRebuildThreads = 1;
+    private static final double CHUNK_BOUNDING_RADIUS_BLOCKS = 13.856406460551018;
+    private static final double VIEW_CONTRIBUTION_NEAR_DISTANCE_MULTIPLIER = 1.5;
+    private static final double VIEW_CONTRIBUTION_BASE_HALF_ANGLE_DEGREES = 100.0;
     private static final ExecutorService
         importantChunkRebuildExecutor =
         Executors.newFixedThreadPool(numImportantChunkRebuildThreads, r -> {
@@ -153,6 +156,8 @@ public class ChunkProxy {
         }
 
         BlockPos cameraBlockPos = camera.getBlockPos();
+        Vec3d cameraPos = camera.getPos();
+        Vec3d cameraForward = Vec3d.fromPolar(camera.getPitch(), camera.getYaw()).normalize();
         List<Integer> processedChunks = new ArrayList<>();
         for (Map.Entry<Integer, ChunkBuilder.BuiltChunk> rebuildEntry : rebuildQueue.entrySet()) {
             ChunkBuilder.BuiltChunk builtChunk = rebuildEntry.getValue();
@@ -178,12 +183,15 @@ public class ChunkProxy {
                 Long.MIN_VALUE);
             boolean recentlyVisible = lastVisibleFrame != Long.MIN_VALUE
                 && rebuildFrameCounter - lastVisibleFrame <= VISIBLE_REBUILD_GRACE_FRAMES;
+            boolean potentiallyViewContributing = isPotentiallyViewContributing(cameraPos,
+                cameraForward, chunkCenterPos, distanceChunks);
 
             if (!isImportant) {
-                if (!recentlyVisible) {
+                if (!recentlyVisible && !potentiallyViewContributing) {
                     continue;
                 }
-                if (chunkOriginKey == builtChunkBuildOrigins.getOrDefault(builtChunk.index,
+                if (!potentiallyViewContributing
+                    && chunkOriginKey == builtChunkBuildOrigins.getOrDefault(builtChunk.index,
                     Long.MIN_VALUE)) {
                     int updateInterval = RayTracingTuning.terrainUpdateIntervalFrames(
                         distanceChunks);
@@ -210,6 +218,31 @@ public class ChunkProxy {
         for (Integer processedChunk : processedChunks) {
             rebuildQueue.remove(processedChunk);
         }
+    }
+
+    private static boolean isPotentiallyViewContributing(Vec3d cameraPos, Vec3d cameraForward,
+        BlockPos chunkCenterPos, double distanceChunks) {
+        double farFieldStartDistanceChunks = RayTracingTuning.getFarFieldStartDistanceChunks();
+        if (distanceChunks <= farFieldStartDistanceChunks
+            * VIEW_CONTRIBUTION_NEAR_DISTANCE_MULTIPLIER) {
+            return true;
+        }
+
+        Vec3d toChunk = new Vec3d(
+            chunkCenterPos.getX() - cameraPos.x,
+            chunkCenterPos.getY() - cameraPos.y,
+            chunkCenterPos.getZ() - cameraPos.z);
+        double distanceBlocks = toChunk.length();
+        if (distanceBlocks <= 1e-6) {
+            return true;
+        }
+
+        double angularRadiusDegrees = Math.toDegrees(Math.asin(Math.min(1.0,
+            CHUNK_BOUNDING_RADIUS_BLOCKS / Math.max(distanceBlocks, CHUNK_BOUNDING_RADIUS_BLOCKS))));
+        double halfAngleDegrees = Math.min(179.0,
+            VIEW_CONTRIBUTION_BASE_HALF_ANGLE_DEGREES + angularRadiusDegrees);
+        double dotThreshold = Math.cos(Math.toRadians(halfAngleDegrees));
+        return toChunk.multiply(1.0 / distanceBlocks).dotProduct(cameraForward) >= dotThreshold;
     }
 
     public static void waitImportantChunkRebuild() {
