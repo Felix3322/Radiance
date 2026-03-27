@@ -24,6 +24,18 @@ def radianceWindowsJarPath = providers.gradleProperty("radianceWindowsJar")
     .orNull
 def radianceWindowsJar = radianceWindowsJarPath ? file(radianceWindowsJarPath) : null
 def extractedRadianceWindowsRuntimeDir = layout.buildDirectory.dir("generated/radianceRuntime/windows")
+def radianceAllowIncompleteRuntimePackaging = providers
+    .gradleProperty("radianceAllowIncompleteRuntimePackaging")
+    .map { it.toBoolean() }
+    .orElse(false)
+def radianceRequestedTasks = gradle.startParameter.taskNames.collect { it.toLowerCase() }
+def radiancePackagingTaskRequested = radianceRequestedTasks.any { taskName ->
+    taskName == "build"
+        || taskName == "assemble"
+        || taskName.contains("jar")
+        || taskName.contains("publish")
+        || taskName.contains("remap")
+}
 
 def radianceWindowsJarExplicitlyConfigured =
     gradle.startParameter.projectProperties.containsKey("radianceWindowsJar")
@@ -52,6 +64,8 @@ tasks.register("extractRadianceWindowsRuntime") {
             include "core.dll"
             include "nvngx_*.dll"
             include "libxess*.dll"
+            include "sl.*.dll"
+            include "NvLowLatencyVk.dll"
             into outputDir
         }
 
@@ -72,6 +86,13 @@ tasks.register("syncBuiltWindowsCoreDll") {
     outputs.file(file("src/main/resources/core.dll"))
 
     doLast {
+        def destinationCoreDll = file("src/main/resources/core.dll")
+        if (destinationCoreDll.exists()
+            && destinationCoreDll.length() == builtWindowsCoreDll.length()
+            && destinationCoreDll.lastModified() == builtWindowsCoreDll.lastModified()) {
+            logger.lifecycle("core.dll already synchronized; skipping copy.")
+            return
+        }
         copy {
             from(builtWindowsCoreDll)
             into("src/main/resources")
@@ -134,6 +155,7 @@ processResources {
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
     filteringCharset "UTF-8"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     if (builtWindowsCoreDll.exists()) {
         dependsOn(tasks.named("syncBuiltWindowsCoreDll"))
@@ -141,19 +163,12 @@ processResources {
 
     def runtimeDirectorySource = null
     def mainResourcesDir = file("src/main/resources")
-    def localRuntimeAvailable =
-        new File(mainResourcesDir, "core.dll").exists()
-            || new File(mainResourcesDir, "libcore.so").exists()
-            || new File(mainResourcesDir, "nvngx_dlssg.dll").exists()
-            || new File(mainResourcesDir, "libxess.dll").exists()
     if (radianceRuntimeDir != null) {
         if (radianceRuntimeDir.exists()) {
             runtimeDirectorySource = radianceRuntimeDir
         } else {
             logger.warn("Configured radiance runtime directory does not exist: ${radianceRuntimeDir}")
         }
-    } else if (localRuntimeAvailable) {
-        runtimeDirectorySource = mainResourcesDir
     } else if (radianceWindowsJar != null && radianceWindowsJar.exists()) {
         dependsOn(tasks.named("extractRadianceWindowsRuntime"))
         runtimeDirectorySource = extractedRadianceWindowsRuntimeDir
@@ -162,23 +177,46 @@ processResources {
         logger.warn("Configured Radiance Windows jar does not exist: ${radianceWindowsJar}")
     }
 
-    def runtimeSourceMatchesMainResources =
-        runtimeDirectorySource instanceof File
-            && runtimeDirectorySource.canonicalFile == mainResourcesDir.canonicalFile
+    boolean packagedWindowsCoreAvailable =
+        new File(mainResourcesDir, "core.dll").exists() || builtWindowsCoreDll.exists()
+    boolean packagedLinuxCoreAvailable = new File(mainResourcesDir, "libcore.so").exists()
 
-    if (runtimeDirectorySource != null && !runtimeSourceMatchesMainResources) {
-        exclude "core.dll"
-        exclude "libcore.so"
-        exclude "nvngx_*.dll"
-        exclude "libxess*.dll"
-        exclude "shaders/**"
+    if (radianceRuntimeDir != null && radianceRuntimeDir.exists()) {
+        packagedWindowsCoreAvailable |= new File(radianceRuntimeDir, "core.dll").exists()
+        packagedLinuxCoreAvailable |= new File(radianceRuntimeDir, "libcore.so").exists()
+    } else if (radianceWindowsJar != null && radianceWindowsJar.exists()) {
+        packagedWindowsCoreAvailable = true
+    }
 
+    if (!packagedWindowsCoreAvailable || !packagedLinuxCoreAvailable) {
+        def missingRuntimeTargets = []
+        if (!packagedWindowsCoreAvailable) {
+            missingRuntimeTargets << "Windows (core.dll)"
+        }
+        if (!packagedLinuxCoreAvailable) {
+            missingRuntimeTargets << "Linux (libcore.so)"
+        }
+
+        def incompleteRuntimeMessage = (
+            "Radiance runtime packaging is incomplete: missing "
+                + missingRuntimeTargets.join(", ")
+                + ". Provide the missing runtime via src/main/resources or -PradianceRuntimeDir=..., "
+                + "or pass -PradianceAllowIncompleteRuntimePackaging=true to package a platform-limited artifact intentionally."
+        )
+        if (radiancePackagingTaskRequested && !radianceAllowIncompleteRuntimePackaging.get()) {
+            throw new GradleException(incompleteRuntimeMessage)
+        }
+        logger.warn(incompleteRuntimeMessage)
+    }
+
+    if (runtimeDirectorySource != null) {
         from(runtimeDirectorySource) {
             include "core.dll"
             include "libcore.so"
             include "nvngx_*.dll"
             include "libxess*.dll"
-            include "shaders/**"
+            include "sl.*.dll"
+            include "NvLowLatencyVk.dll"
         }
     }
 

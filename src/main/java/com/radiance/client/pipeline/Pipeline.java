@@ -1277,6 +1277,29 @@ public class Pipeline {
         return false;
     }
 
+    private static boolean hasDisconnectedCurrentModuleInputs() {
+        Map<ImageConfig, ImageConfig> dstToSrcMap = new HashMap<>();
+        for (Map.Entry<ImageConfig, List<ImageConfig>> entry : INSTANCE.moduleConnections.entrySet()) {
+            ImageConfig src = entry.getKey();
+            for (ImageConfig dst : entry.getValue()) {
+                dstToSrcMap.put(dst, src);
+            }
+        }
+
+        for (Module module : INSTANCE.modules) {
+            for (ImageConfig inputConf : module.inputImageConfigs) {
+                if (!dstToSrcMap.containsKey(inputConf)) {
+                    RadianceClient.LOGGER.warn(
+                        "Stored pipeline has unconnected input '{}' on module '{}'. Rebuilding default pipeline.",
+                        inputConf.name, module.name);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static void applyPipelineStorage(PipelineStorage pipelineStorage) {
         if (pipelineStorage == null) {
             assembleDefault();
@@ -1389,6 +1412,10 @@ public class Pipeline {
 
         if (storage.pipeline != null) {
             applyPipelineStorage(storage.pipeline);
+            if (hasDisconnectedCurrentModuleInputs()) {
+                assembleDefault();
+                savePipeline();
+            }
             build();
             return;
         }
