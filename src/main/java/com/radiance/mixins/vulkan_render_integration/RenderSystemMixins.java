@@ -43,9 +43,11 @@ public abstract class RenderSystemMixins {
     private static void redirectSetShaderProgram(ShaderProgramKey shaderProgramKey,
         CallbackInfoReturnable<ShaderProgram> cir) {
         int type = resolveOverlayPipelineType(shaderProgramKey.configId().toString());
-        if (type >= 0) {
-            RendererProxy.bindOverlayPipeline(type);
+        if (type < 0) {
+            return;
         }
+
+        RendererProxy.bindOverlayPipeline(type);
         cir.setReturnValue(null);
     }
 

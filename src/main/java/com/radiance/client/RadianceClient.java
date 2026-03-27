@@ -60,6 +60,16 @@ public class RadianceClient implements ClientModInitializer {
             // currently not used, can be used later for fg
             copyOptionalFileFromResource(xessDx11Path, Path.of("libxess_dx11.dll"));
             copyOptionalFileFromResource(xessFgPath, Path.of("libxess_fg.dll"));
+            copyOptionalFileFromResource(radianceDir.resolve("sl.interposer.dll"),
+                Path.of("sl.interposer.dll"));
+            copyOptionalFileFromResource(radianceDir.resolve("sl.common.dll"),
+                Path.of("sl.common.dll"));
+            copyOptionalFileFromResource(radianceDir.resolve("sl.reflex.dll"),
+                Path.of("sl.reflex.dll"));
+            copyOptionalFileFromResource(radianceDir.resolve("sl.pcl.dll"),
+                Path.of("sl.pcl.dll"));
+            copyOptionalFileFromResource(radianceDir.resolve("NvLowLatencyVk.dll"),
+                Path.of("NvLowLatencyVk.dll"));
 
             loadOptionalLibrary(xessPath);
 

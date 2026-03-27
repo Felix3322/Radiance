@@ -151,6 +151,51 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
                 }
             });
 
+        SimpleOption<Boolean> enableOutputScale2x = SimpleOption.ofBoolean(
+            Options.OUTPUT_SCALE_2X_KEY,
+            Options.outputScale2x,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setOutputScale2x(value, true);
+                }
+            });
+
+        SimpleOption<Boolean> enableSimplifiedIndirect = SimpleOption.ofBoolean(
+            Options.SIMPLIFIED_INDIRECT_KEY,
+            Options.simplifiedIndirect,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setSimplifiedIndirect(value, true);
+                }
+            });
+
+        SimpleOption<Boolean> enableReflex = SimpleOption.ofBoolean(
+            Options.REFLEX_ENABLED_KEY,
+            Options.reflexEnabled,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setReflexEnabled(value, true);
+                }
+            });
+
+        SimpleOption<Boolean> enableReflexBoost = SimpleOption.ofBoolean(
+            Options.REFLEX_BOOST_KEY,
+            Options.reflexBoost,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setReflexBoost(value, true);
+                }
+            });
+
+        SimpleOption<Boolean> enableVrrMode = SimpleOption.ofBoolean(
+            Options.VRR_MODE_KEY,
+            Options.vrrMode,
+            value -> {
+                if (MinecraftClient.getInstance().getWindow() != null) {
+                    Options.setVrrMode(value, true);
+                }
+            });
+
         SimpleOption<Integer>
             chunkBuildingBatchSize =
             new SimpleOption<>(Options.CHUNK_BUILDING_BATCH_SIZE_KEY,
@@ -246,6 +291,11 @@ public class VideoOptionsScreenMixins extends GameOptionsScreenMixins {
             new CategoryVideoOptionEntry(Text.translatable(Options.CATEGORY_PIPELINE), body));
         this.body.addSingleOptionEntry(qualityLevel);
         this.body.addSingleOptionEntry(enableDlssFrameGeneration);
+        this.body.addSingleOptionEntry(enableOutputScale2x);
+        this.body.addSingleOptionEntry(enableSimplifiedIndirect);
+        this.body.addSingleOptionEntry(enableReflex);
+        this.body.addSingleOptionEntry(enableReflexBoost);
+        this.body.addSingleOptionEntry(enableVrrMode);
         this.body.addSingleOptionEntry(pipelineSettings);
 
         ci.cancel();

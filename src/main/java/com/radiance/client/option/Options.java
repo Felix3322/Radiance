@@ -43,6 +43,11 @@ public class Options {
     public static final String RAY_BOUNCES_KEY = "options.video.ray_bounces";
     public static final String CHUNK_BUILDING_BATCH_SIZE_KEY = "options.video.chunk_building_batch_size";
     public static final String CHUNK_BUILDING_TOTAL_BATCHES_KEY = "options.video.chunk_building_total_batches";
+    public static final String OUTPUT_SCALE_2X_KEY = "options.video.output_scale_2x";
+    public static final String SIMPLIFIED_INDIRECT_KEY = "options.video.simplified_indirect";
+    public static final String REFLEX_ENABLED_KEY = "options.video.reflex_enabled";
+    public static final String REFLEX_BOOST_KEY = "options.video.reflex_boost";
+    public static final String VRR_MODE_KEY = "options.video.vrr_mode";
     public static final String PIPELINE_SETUP_KEY = "options.video.pipeline_setup";
 
     public static final String UPSCALER_TYPE_NATIVE = "options.video.upscaler_type.native";
@@ -234,6 +239,11 @@ public class Options {
     public static int denoiserMode = 1;
     public static boolean hdrOutput = false;
     public static boolean dlssFrameGeneration = false;
+    public static boolean outputScale2x = false;
+    public static boolean simplifiedIndirect = false;
+    public static boolean reflexEnabled = false;
+    public static boolean reflexBoost = false;
+    public static boolean vrrMode = false;
     public static int rayBounces = 4;
     public static int chunkBuildingBatchSize = 14;
     public static int chunkBuildingTotalBatches = 16;
@@ -260,6 +270,16 @@ public class Options {
                 String.valueOf(hdrOutput))), false);
             setDlssFrameGeneration(Boolean.parseBoolean(props.getProperty("dlssFrameGeneration",
                 String.valueOf(dlssFrameGeneration))), false);
+            setOutputScale2x(Boolean.parseBoolean(props.getProperty("outputScale2x",
+                String.valueOf(outputScale2x))), false);
+            setSimplifiedIndirect(Boolean.parseBoolean(props.getProperty("simplifiedIndirect",
+                String.valueOf(simplifiedIndirect))), false);
+            setReflexEnabled(Boolean.parseBoolean(props.getProperty("reflexEnabled",
+                String.valueOf(reflexEnabled))), false);
+            setReflexBoost(Boolean.parseBoolean(props.getProperty("reflexBoost",
+                String.valueOf(reflexBoost))), false);
+            setVrrMode(Boolean.parseBoolean(props.getProperty("vrrMode",
+                String.valueOf(vrrMode))), false);
             qualityLevel = Integer.parseInt(
                 props.getProperty("qualityLevel", String.valueOf(qualityLevel)));
             setRayBounces(Integer.parseInt(props.getProperty("rayBounces",
@@ -294,6 +314,11 @@ public class Options {
         props.setProperty("chunkBuildingBatchSize", String.valueOf(chunkBuildingBatchSize));
         props.setProperty("chunkBuildingTotalBatches", String.valueOf(chunkBuildingTotalBatches));
         props.setProperty("dlssFrameGeneration", String.valueOf(dlssFrameGeneration));
+        props.setProperty("outputScale2x", String.valueOf(outputScale2x));
+        props.setProperty("simplifiedIndirect", String.valueOf(simplifiedIndirect));
+        props.setProperty("reflexEnabled", String.valueOf(reflexEnabled));
+        props.setProperty("reflexBoost", String.valueOf(reflexBoost));
+        props.setProperty("vrrMode", String.valueOf(vrrMode));
 
         try {
             Files.createDirectories(path.getParent());
@@ -373,6 +398,13 @@ public class Options {
 
     public native static void nativeSetDlssFrameGeneration(boolean dlssFrameGeneration, boolean write);
     public native static boolean nativeHasDlssFrameGenerationAvailable();
+    public native static void nativeSetOutputScale2x(boolean enabled, boolean write);
+    public native static void nativeSetSimplifiedIndirect(boolean enabled, boolean write);
+    public native static void nativeSetReflexEnabled(boolean enabled, boolean write);
+    public native static void nativeSetReflexBoost(boolean enabled, boolean write);
+    public native static boolean nativeIsReflexSupported();
+    public native static void nativeSetVrrMode(boolean enabled, boolean write);
+    public native static int nativeGetDisplayRefreshRate();
 
     public static void setDlssFrameGeneration(boolean dlssFrameGeneration, boolean write) {
         if (write && dlssFrameGeneration && !nativeHasDlssFrameGenerationAvailable()) {
@@ -384,6 +416,67 @@ public class Options {
         nativeSetDlssFrameGeneration(dlssFrameGeneration, write);
         if (write) {
             overwriteConfig();
+        }
+    }
+
+    public static void setOutputScale2x(boolean enabled, boolean write) {
+        outputScale2x = enabled;
+        nativeSetOutputScale2x(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static void setSimplifiedIndirect(boolean enabled, boolean write) {
+        simplifiedIndirect = enabled;
+        nativeSetSimplifiedIndirect(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static boolean isReflexSupported() {
+        try {
+            return nativeIsReflexSupported();
+        } catch (UnsatisfiedLinkError e) {
+            return false;
+        }
+    }
+
+    public static void setReflexEnabled(boolean enabled, boolean write) {
+        if (write && enabled && !isReflexSupported()) {
+            RadianceClient.LOGGER.warn(
+                "NVIDIA Reflex was requested, but the current runtime does not expose Streamline Reflex support. Keeping the option disabled.");
+            enabled = false;
+        }
+        reflexEnabled = enabled;
+        nativeSetReflexEnabled(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static void setReflexBoost(boolean enabled, boolean write) {
+        reflexBoost = enabled;
+        nativeSetReflexBoost(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static void setVrrMode(boolean enabled, boolean write) {
+        vrrMode = enabled;
+        nativeSetVrrMode(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static int getDisplayRefreshRate() {
+        try {
+            return nativeGetDisplayRefreshRate();
+        } catch (UnsatisfiedLinkError e) {
+            return 0;
         }
     }
 

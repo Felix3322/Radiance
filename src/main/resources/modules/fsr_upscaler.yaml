@@ -23,3 +23,6 @@ attributeConfigs:
   - name: "render_pipeline.module.fsr_upscaler.attribute.sharpness"
     type: "float_range:0.0-1.0"
     value: "0.7"
+  - name: "render_pipeline.module.fsr_upscaler.attribute.pre_exposure"
+    type: "float_range:0.0-16.0"
+    value: "1.0"

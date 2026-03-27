@@ -31,6 +31,8 @@ public class TextureProxy {
         int height,
         int level);
 
+    public synchronized static native void setTextureAlphaClass(int id, int alphaClass);
+
     public static void prepareImage(NativeImage.InternalFormat internalFormat, int id,
         int mipLevels, int width, int height) {
         switch (internalFormat) {
