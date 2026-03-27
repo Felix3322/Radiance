@@ -36,23 +36,33 @@ public class RendererProxy {
     public static native void present();
 
     public static void submitCommandAndPresent() {
-        if (shuttingDown) {
-            return;
+        synchronized (TextureProxy.class) {
+            if (shuttingDown) {
+                return;
+            }
+            submitCommand();
+            if (shuttingDown) {
+                return;
+            }
+            present();
         }
-        submitCommand();
-        if (shuttingDown) {
-            return;
-        }
-        present();
     }
 
     public static void requestShutdown() {
-        shuttingDown = true;
-        beginShutdownNative();
+        synchronized (TextureProxy.class) {
+            shuttingDown = true;
+            beginShutdownNative();
+        }
     }
 
     public static boolean isShuttingDown() {
         return shuttingDown;
+    }
+
+    public static void closeRenderer() {
+        synchronized (TextureProxy.class) {
+            close();
+        }
     }
 
     public static void bindOverlayPipeline(int type) {
@@ -87,7 +97,7 @@ public class RendererProxy {
 
     public static native void postBlur();
 
-    public static native void close();
+    private static native void close();
 
     public static native void shouldRenderWorld(boolean renderWorld);
 

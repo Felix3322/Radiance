@@ -190,7 +190,7 @@ public class MinecraftClientMixins {
 
     @Inject(method = "scheduleStop()V", at = @At(value = "TAIL"))
     public void close(CallbackInfo ci) {
-        RendererProxy.close();
+        RendererProxy.closeRenderer();
     }
     // endregion
 
