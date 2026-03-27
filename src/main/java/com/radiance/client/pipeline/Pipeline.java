@@ -577,6 +577,12 @@ public class Pipeline {
     }
 
     public static void loadPipeline() {
+        try {
+            recollectNativeModules();
+        } catch (UnsatisfiedLinkError ignored) {
+            collectNativeModules();
+        }
+
         clear();
 
         if (!Files.exists(PIPELINE_CONFIG_PATH)) {
