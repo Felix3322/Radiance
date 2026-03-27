@@ -444,7 +444,7 @@ public class Options {
     }
 
     public static void setReflexEnabled(boolean enabled, boolean write) {
-        if (write && enabled && !isReflexSupported()) {
+        if (enabled && !isReflexSupported()) {
             RadianceClient.LOGGER.warn(
                 "NVIDIA Reflex was requested, but the current runtime does not expose Streamline Reflex support. Keeping the option disabled.");
             enabled = false;

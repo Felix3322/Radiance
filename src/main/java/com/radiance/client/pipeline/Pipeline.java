@@ -1414,6 +1414,7 @@ public class Pipeline {
             applyPipelineStorage(storage.pipeline);
             if (hasDisconnectedCurrentModuleInputs()) {
                 assembleDefault();
+                INSTANCE.mode = PipelineMode.PRESET;
                 savePipeline();
             }
             build();
