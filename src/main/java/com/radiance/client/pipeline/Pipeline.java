@@ -614,6 +614,12 @@ public class Pipeline {
         }
     }
 
+    private static class PipelineStorageLoadResult {
+
+        private PipelineStorage storage;
+        private boolean wrappedPresetFallback;
+    }
+
     private static String stripLeadingJavaTag(String yamlText) {
         if (yamlText == null || !yamlText.startsWith("!!")) {
             return yamlText;
@@ -625,7 +631,8 @@ public class Pipeline {
         return yamlText.substring(newlineIndex + 1);
     }
 
-    private static PipelineStorage loadPipelineStorageCompat(String yamlText) {
+    private static PipelineStorageLoadResult loadPipelineStorage(String yamlText) {
+        PipelineStorageLoadResult result = new PipelineStorageLoadResult();
         LoaderOptions loaderOptions = new LoaderOptions();
         TagInspector tagInspector = tag -> tag.getClassName()
             .startsWith("com.radiance.client.pipeline");
@@ -634,7 +641,8 @@ public class Pipeline {
         Yaml typedYaml = new Yaml(constructor);
 
         try {
-            return typedYaml.load(yamlText);
+            result.storage = typedYaml.load(yamlText);
+            return result;
         } catch (Exception directLoadError) {
             String sanitizedYamlText = stripLeadingJavaTag(yamlText);
             Object rawStorage = new Yaml().load(sanitizedYamlText);
@@ -642,13 +650,13 @@ public class Pipeline {
                 Object nestedPipeline = rootMap.get("pipeline");
                 if (nestedPipeline != null) {
                     String nestedYamlText = new Yaml().dump(nestedPipeline);
-                    return typedYaml.load(nestedYamlText);
+                    result.storage = typedYaml.load(nestedYamlText);
+                    return result;
                 }
 
                 if (rootMap.containsKey("mode")) {
-                    RadianceClient.LOGGER.warn(
-                        "Saved pipeline uses metadata wrapper format without an embedded custom pipeline. Rebuilding default pipeline.");
-                    return null;
+                    result.wrappedPresetFallback = true;
+                    return result;
                 }
             }
             throw directLoadError;
@@ -671,9 +679,11 @@ public class Pipeline {
         }
 
         PipelineStorage pipelineStorage;
+        PipelineStorageLoadResult loadResult;
         try {
             String yamlText = Files.readString(PIPELINE_CONFIG_PATH, StandardCharsets.UTF_8);
-            pipelineStorage = loadPipelineStorageCompat(yamlText);
+            loadResult = loadPipelineStorage(yamlText);
+            pipelineStorage = loadResult.storage;
         } catch (Exception e) {
             RadianceClient.LOGGER.error("Error while loading pipeline.", e);
             assembleDefault();
@@ -685,7 +695,12 @@ public class Pipeline {
             || pipelineStorage.modules.isEmpty()) {
             assembleDefault();
             savePipeline();
-            RadianceClient.LOGGER.error("Pipeline is empty.");
+            if (loadResult.wrappedPresetFallback) {
+                RadianceClient.LOGGER.info(
+                    "Saved pipeline metadata used preset-wrapper format without embedded pipeline data. Rebuilt the default pipeline.");
+            } else {
+                RadianceClient.LOGGER.error("Pipeline is empty.");
+            }
             return;
         }
 
