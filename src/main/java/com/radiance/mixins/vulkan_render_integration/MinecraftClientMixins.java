@@ -48,7 +48,7 @@ public class MinecraftClientMixins {
     @Redirect(method = "<init>(Lnet/minecraft/client/RunArgs;)V",
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;initRenderer(IZ)V"))
     public void initRenderer(int debugVerbosity, boolean debugSync) {
-        long stackSize = 512 * 1024 * 1024; // 32MB
+        long stackSize = 32L * 1024 * 1024; // 32MB
         AtomicReference<Throwable> initFailure = new AtomicReference<>();
         Runnable myRunnable = () -> {
             try {
@@ -70,6 +70,8 @@ public class MinecraftClientMixins {
 
         Throwable failure = initFailure.get();
         if (failure != null) {
+            System.err.println("[Radiance] Native renderer initialization failed");
+            failure.printStackTrace(System.err);
             throw new RuntimeException("Failed to initialize Radiance Vulkan renderer", failure);
         }
 

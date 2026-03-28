@@ -50,6 +50,7 @@
     "vulkan_render_integration.ItemRendererMixins",
     "vulkan_render_integration.LightmapTextureManagerMixins",
     "vulkan_render_integration.LightningEntityRendererMixins",
+    "vulkan_render_integration.MainMixins",
     "vulkan_render_integration.MinecraftClientMixins",
     "vulkan_render_integration.MipmapHelperMixins",
     "vulkan_render_integration.NativeImageMixins",

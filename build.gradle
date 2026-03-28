@@ -121,6 +121,10 @@ tasks.named("runClient", JavaExec) {
    javaLauncher = javaToolchains.launcherFor {
        languageVersion = JavaLanguageVersion.of(21)
    }
+   minHeapSize = "512m"
+   maxHeapSize = "2048m"
+   jvmArgs "-XX:HeapBaseMinAddress=4G",
+           "-XX:CICompilerCount=2"
 }
 
 repositories {
