@@ -6,40 +6,43 @@ import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.TriState;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(RenderLayer.class)
 public class RenderLayerMixins {
 
-    @Shadow
-    @Final
-    @Mutable
-    private static RenderLayer LIGHTNING;
+    @Unique
+    private static RenderLayer radiance$lightningLayer;
 
-    @Inject(method = "<clinit>", at = @At("TAIL"))
-    private static void replaceLightning(CallbackInfo ci) {
-        LIGHTNING =
-            RenderLayer.of("lightning",
-                VertexFormats.POSITION_TEXTURE_COLOR,
-                VertexFormat.DrawMode.QUADS,
-                1536,
-                false,
-                true,
-                RenderLayer.MultiPhaseParameters.builder()
-                    .program(RenderLayer.LIGHTNING_PROGRAM)
-                    .writeMaskState(RenderLayer.ALL_MASK)
-                    .transparency(RenderLayer.LIGHTNING_TRANSPARENCY)
-                    .target(RenderLayer.WEATHER_TARGET)
-                    .texture(new RenderPhase.Texture(
-                        Identifier.ofVanilla("textures/block/lightning.png"),
-                        TriState.FALSE,
-                        false))
-                    .build(false));
+    @Unique
+    private static RenderLayer radiance$createLightningLayer() {
+        return RenderLayer.of("lightning",
+            VertexFormats.POSITION_TEXTURE_COLOR,
+            VertexFormat.DrawMode.QUADS,
+            1536,
+            false,
+            true,
+            RenderLayer.MultiPhaseParameters.builder()
+                .program(RenderLayer.LIGHTNING_PROGRAM)
+                .writeMaskState(RenderLayer.ALL_MASK)
+                .transparency(RenderLayer.LIGHTNING_TRANSPARENCY)
+                .target(RenderLayer.WEATHER_TARGET)
+                .texture(new RenderPhase.Texture(
+                    Identifier.ofVanilla("textures/block/lightning.png"),
+                    TriState.FALSE,
+                    false))
+                .build(false));
+    }
+
+    @Inject(method = "getLightning", at = @At("HEAD"), cancellable = true)
+    private static void radiance$replaceLightning(CallbackInfoReturnable<RenderLayer> cir) {
+        if (radiance$lightningLayer == null) {
+            radiance$lightningLayer = radiance$createLightningLayer();
+        }
+        cir.setReturnValue(radiance$lightningLayer);
     }
 }
