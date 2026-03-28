@@ -83,6 +83,28 @@ Use `cmake` to build it and install it. Please refer to [this](https://github.co
 
 Finally, build with `./gradlew build`.
 
+## Runtime packaging rule
+
+Normal packaging is expected to produce a runtime-complete artifact, not a silently Windows-only JAR.
+
+- A standard package/build should include both the Windows runtime (`core.dll` and companion DLLs) and the Linux runtime (`libcore.so`).
+- The presence of only Windows runtime files in `src/main/resources/` is **not** considered sufficient for a normal cross-platform package.
+- To satisfy the standard packaging check, place the missing runtime files in `src/main/resources/` or provide a runtime directory explicitly:
+
+```bash
+./gradlew build -PradianceRuntimeDir=/absolute/path/to/runtime
+```
+
+- The runtime directory should contain the platform runtime files that are missing from the repo copy, especially `libcore.so` for Linux and `core.dll` for Windows.
+- If `libcore.so` is missing, packaging tasks are expected to fail instead of quietly publishing a broken “cross-platform” artifact.
+- If you intentionally want to produce a platform-limited artifact for local testing, opt in explicitly:
+
+```bash
+./gradlew build -PradianceAllowIncompleteRuntimePackaging=true
+```
+
+- When overriding runtime assets from an external runtime directory or extracted Windows runtime JAR, keep the bundled `shaders/**` resources in the final artifact.
+
 # Settings Reference
 
 A Chinese settings reference covering all current module options is available at:

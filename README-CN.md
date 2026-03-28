@@ -80,6 +80,28 @@ git clone https://github.com/Minecraft-Radiance/MCVR.git
 
 最后，用`./gradlew build`构建。
 
+## Runtime 打包规则
+
+正常的打包流程应产出运行时完整的制品，而不是一个悄悄变成仅 Windows 可用的 JAR。
+
+- 标准的 package/build 应同时包含 Windows 运行时（`core.dll` 及其配套 DLL）和 Linux 运行时（`libcore.so`）。
+- `src/main/resources/` 中只有 Windows 运行时文件，并不足以视为正常的跨平台打包结果。
+- 若要满足标准打包检查，请将缺失的运行时文件放入 `src/main/resources/`，或显式指定一个运行时目录：
+
+```bash
+./gradlew build -PradianceRuntimeDir=/absolute/path/to/runtime
+```
+
+- 该运行时目录应包含仓库内当前缺失的平台运行时文件，至少要补齐 Linux 的 `libcore.so`；若仓库副本缺失 Windows 运行时，也应一并提供 `core.dll`。
+- 如果缺少 `libcore.so`，打包任务应直接失败，而不是静默发布一个损坏的“跨平台”制品。
+- 如果你是为了本地测试而有意生成平台受限的制品，必须显式 opt-in：
+
+```bash
+./gradlew build -PradianceAllowIncompleteRuntimePackaging=true
+```
+
+- 如果你通过外部运行时目录或提取出的 Windows runtime JAR 覆盖运行时资源，最终制品里仍需保留仓库自带的 `shaders/**` 资源。
+
 # 设置文档
 
 当前所有模块设置的中文参考文档见：
