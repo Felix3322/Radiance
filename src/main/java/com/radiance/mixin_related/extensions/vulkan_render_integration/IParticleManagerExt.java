@@ -11,4 +11,12 @@ public interface IParticleManagerExt {
     List<ParticleTextureSheet> radiance$getTextureSheets();
 
     Map<ParticleTextureSheet, Queue<Particle>> radiance$getParticles();
+
+    default List<ParticleTextureSheet> neoVoxelRT$getTextureSheets() {
+        return radiance$getTextureSheets();
+    }
+
+    default Map<ParticleTextureSheet, Queue<Particle>> neoVoxelRT$getParticles() {
+        return radiance$getParticles();
+    }
 }

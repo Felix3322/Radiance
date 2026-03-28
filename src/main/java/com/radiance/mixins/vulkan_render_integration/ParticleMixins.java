@@ -50,17 +50,17 @@ public class ParticleMixins implements IParticleExt {
     protected float prevAngle;
 
     @Override
-    public double radiance$getX() {
+    public double neoVoxelRT$getX() {
         return x;
     }
 
     @Override
-    public double radiance$getY() {
+    public double neoVoxelRT$getY() {
         return y;
     }
 
     @Override
-    public double radiance$getZ() {
+    public double neoVoxelRT$getZ() {
         return z;
     }
 

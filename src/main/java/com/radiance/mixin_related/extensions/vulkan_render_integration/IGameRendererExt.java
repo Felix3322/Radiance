@@ -5,4 +5,8 @@ import org.joml.Matrix4f;
 public interface IGameRendererExt {
 
     Matrix4f radiance$getRotationMatrix();
+
+    default Matrix4f neoVoxelRT$getRotationMatrix() {
+        return radiance$getRotationMatrix();
+    }
 }

@@ -12,12 +12,12 @@ import net.minecraft.util.StringIdentifiable;
 import net.minecraft.util.TranslatableOption;
 
 public enum QualityLevel implements TranslatableOption, StringIdentifiable {
-    FLUENT(5, "fluent", QUALITY_LEVEL_FLUENT),
-    PERFORMANCE(0, "performance", QUALITY_LEVEL_PERFORMANCE),
-    BALANCED(1, "balanced", QUALITY_LEVEL_BALANCED),
-    HIGH(2, "high", QUALITY_LEVEL_QUALITY),
-    ULTRA(3, "ultra", QUALITY_LEVEL_ULTRA),
-    EXTREME(4, "extreme", QUALITY_LEVEL_EXTREME);
+    FLUENT(5, "fluent", Options.QUALITY_LEVEL_FLUENT),
+    PERFORMANCE(0, "performance", Options.QUALITY_LEVEL_PERFORMANCE),
+    BALANCED(1, "balanced", Options.QUALITY_LEVEL_BALANCED),
+    HIGH(2, "high", Options.QUALITY_LEVEL_QUALITY),
+    ULTRA(3, "ultra", Options.QUALITY_LEVEL_ULTRA),
+    EXTREME(4, "extreme", Options.QUALITY_LEVEL_EXTREME);
 
     public static final Codec<QualityLevel> Codec =
         StringIdentifiable.createCodec(QualityLevel::values);
@@ -56,3 +56,4 @@ public enum QualityLevel implements TranslatableOption, StringIdentifiable {
         return name;
     }
 }
+

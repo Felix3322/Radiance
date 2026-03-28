@@ -21,4 +21,14 @@ public interface ILightMapManagerExt {
     float radiance$getDarkenWorldFactor();
 
     float radiance$getBrightnessFactor();
+
+    default float neoVoxelRT$getAmbientLightFactor() { return radiance$getAmbientLightFactor(); }
+    default float neoVoxelRT$getSkyFactor() { return radiance$getSkyFactor(); }
+    default float neoVoxelRT$getBlockFactor() { return radiance$getBlockFactor(); }
+    default boolean neoVoxelRT$isUseBrightLightmap() { return radiance$isUseBrightLightmap(); }
+    default Vector3f neoVoxelRT$getSkyLightColor() { return radiance$getSkyLightColor(); }
+    default float neoVoxelRT$getNightVisionFactor() { return radiance$getNightVisionFactor(); }
+    default float neoVoxelRT$getDarknessScale() { return radiance$getDarknessScale(); }
+    default float neoVoxelRT$getDarkenWorldFactor() { return radiance$getDarkenWorldFactor(); }
+    default float neoVoxelRT$getBrightnessFactor() { return radiance$getBrightnessFactor(); }
 }

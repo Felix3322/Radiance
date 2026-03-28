@@ -177,7 +177,7 @@ public class MinecraftClientMixins {
     @Inject(method = "close()V", at = @At(value = "HEAD"))
     public void closeNativeRenderer(CallbackInfo ci) {
         CloudTileManager.shutdown();
-        RendererProxy.close();
+        RendererProxy.closeRenderer();
     }
     // endregion
 

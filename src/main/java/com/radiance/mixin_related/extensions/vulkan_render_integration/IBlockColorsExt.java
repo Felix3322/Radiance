@@ -9,4 +9,9 @@ public interface IBlockColorsExt {
 
     float radiance$getEmission(BlockState state, @Nullable BlockRenderView world,
         @Nullable BlockPos pos, int tintIndex);
+
+    default float neoVoxelRT$getEmission(BlockState state, @Nullable BlockRenderView world,
+        @Nullable BlockPos pos, int tintIndex) {
+        return radiance$getEmission(state, world, pos, tintIndex);
+    }
 }

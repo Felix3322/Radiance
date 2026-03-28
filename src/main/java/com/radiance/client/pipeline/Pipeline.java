@@ -74,6 +74,44 @@ public class Pipeline {
         return module;
     }
 
+    public static Module getModuleByName(String name) {
+        for (Module m : INSTANCE.modules) {
+            if (Objects.equals(m.name, name)) return m;
+        }
+        return null;
+    }
+
+    public static String getModuleAttributeValue(String moduleName, String attributeName, String fallback) {
+        Module module = getModuleByName(moduleName);
+        if (module == null || module.attributeConfigs == null || attributeName == null) return fallback;
+        for (AttributeConfig attributeConfig : module.attributeConfigs) {
+            if (Objects.equals(attributeConfig.name, attributeName)) {
+                return attributeConfig.value != null ? attributeConfig.value : fallback;
+            }
+        }
+        return fallback;
+    }
+
+    public static int getModuleAttributeIntValue(String moduleName, String attributeName, int fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) return fallback;
+        try { return Integer.parseInt(value); } catch (NumberFormatException ignored) { return fallback; }
+    }
+
+    public static float getModuleAttributeFloatValue(String moduleName, String attributeName, float fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) return fallback;
+        try { return Float.parseFloat(value); } catch (NumberFormatException ignored) { return fallback; }
+    }
+
+    public static boolean getModuleAttributeBooleanValue(String moduleName, String attributeName, boolean fallback) {
+        String value = getModuleAttributeValue(moduleName, attributeName, null);
+        if (value == null) return fallback;
+        if (Objects.equals(value, "render_pipeline.true")) return true;
+        if (Objects.equals(value, "render_pipeline.false")) return false;
+        return Boolean.parseBoolean(value);
+    }
+
     public static void connect(ImageConfig src, ImageConfig dst) {
         if (!Objects.equals(src.format, dst.format)) {
             throw new RuntimeException(
@@ -817,3 +855,4 @@ public class Pipeline {
         public String dstImageName;
     }
 }
+

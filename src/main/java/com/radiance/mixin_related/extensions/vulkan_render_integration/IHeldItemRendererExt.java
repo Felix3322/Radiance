@@ -11,4 +11,12 @@ public interface IHeldItemRendererExt {
         VertexConsumerProvider vertexConsumers,
         ClientPlayerEntity player,
         int light);
+
+    default void neoVoxelRT$renderItem(float tickDelta,
+        MatrixStack matrices,
+        VertexConsumerProvider vertexConsumers,
+        ClientPlayerEntity player,
+        int light) {
+        radiance$renderItem(tickDelta, matrices, vertexConsumers, player, light);
+    }
 }

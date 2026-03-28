@@ -127,6 +127,11 @@ public class ChunkProxy {
         rebuildQueue.put(chunk.index, chunk);
     }
 
+    public static void markLightDirtySection(ChunkSectionPos sectionPos, int lightTypeOrdinal) {
+        markLightDirtySection(sectionPos.getSectionX(), sectionPos.getSectionY(),
+            sectionPos.getSectionZ(), lightTypeOrdinal);
+    }
+
     public static void rebuild(Camera camera) {
 
         BlockPos blockPos = camera.getBlockPos();
@@ -433,5 +438,9 @@ public class ChunkProxy {
 
     public static native void invalidateSingle(long index);
 
+    public static native void markLightDirtySection(int sectionX, int sectionY, int sectionZ,
+        int lightType);
+
     private static native void setChunkLights(long chunkIndex, int lightCount, long lightDataPtr);
 }
+

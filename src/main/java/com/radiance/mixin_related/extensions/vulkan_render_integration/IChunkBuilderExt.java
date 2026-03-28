@@ -11,4 +11,16 @@ public interface IChunkBuilderExt {
     ClientWorld radiance$getWorld();
 
     BlockBufferAllocatorStorage radiance$getBuffers();
+
+    default SectionBuilder neoVoxelRT$getSectionBuilder() {
+        return radiance$getSectionBuilder();
+    }
+
+    default ClientWorld neoVoxelRT$getWorld() {
+        return radiance$getWorld();
+    }
+
+    default BlockBufferAllocatorStorage neoVoxelRT$getBuffers() {
+        return radiance$getBuffers();
+    }
 }

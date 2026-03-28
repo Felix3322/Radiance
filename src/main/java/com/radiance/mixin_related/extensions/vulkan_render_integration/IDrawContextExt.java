@@ -6,4 +6,9 @@ public interface IDrawContextExt {
 
     void radiance$drawOrientedQuad(RenderLayer layer, float x1, float y1, float x2, float y2,
         float thickness, int color);
+
+    default void neoVoxelRT$drawOrientedQuad(RenderLayer layer, float x1, float y1, float x2,
+        float y2, float thickness, int color) {
+        radiance$drawOrientedQuad(layer, x1, y1, x2, y2, thickness, color);
+    }
 }

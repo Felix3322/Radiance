@@ -9,4 +9,8 @@ public interface INativeImageExt {
     NativeImage radiance$alignTo(NativeImage template);
 
     long radiance$getPointer();
+
+    default NativeImage neoVoxelRT$alignTo(NativeImage template) {
+        return radiance$alignTo(template);
+    }
 }

@@ -127,6 +127,14 @@ public class Options {
 
     // HDR10
     public static final String HDR_ENABLED_KEY = "options.video.hdr_enabled";
+    public static final String HDR_OUTPUT_KEY = HDR_ENABLED_KEY;
+    public static final String QUALITY_LEVEL_KEY = "options.video.quality_level";
+    public static final String QUALITY_LEVEL_FLUENT = "options.video.quality_level.fluent";
+    public static final String QUALITY_LEVEL_PERFORMANCE = "options.video.quality_level.performance";
+    public static final String QUALITY_LEVEL_BALANCED = "options.video.quality_level.balanced";
+    public static final String QUALITY_LEVEL_QUALITY = "options.video.quality_level.quality";
+    public static final String QUALITY_LEVEL_ULTRA = "options.video.quality_level.ultra";
+    public static final String QUALITY_LEVEL_EXTREME = "options.video.quality_level.extreme";
     public static final String HDR_PEAK_NITS_KEY = "options.video.hdr_peak_nits";
     public static final String HDR_PAPER_WHITE_NITS_KEY = "options.video.hdr_paper_white_nits";
 
@@ -146,6 +154,7 @@ public class Options {
     public static final String UPSCALER_RES_OVERRIDE_KEY = "options.video.upscaler_res_override";
     public static final String UPSCALER_PRESET_KEY = "options.video.upscaler_preset";
     public static final String OUTPUT_SCALE_2X_KEY = "options.video.output_scale_2x";
+    public static final String DLSS_FRAME_GENERATION_KEY = "options.video.dlss_frame_generation";
 
     // NVIDIA Reflex
     public static final String REFLEX_ENABLED_KEY = "options.video.reflex_enabled";
@@ -211,6 +220,7 @@ public class Options {
     public static int upscalerQuality = 2;  // 0=Performance, 1=Balanced, 2=Quality, 3=Native/DLAA, 4=Custom
     public static int upscalerResOverride = 100; // 33-100%
     public static boolean dlssDEnabled = true;
+    public static int qualityLevel = QualityLevel.BALANCED.getId();
     public static int rayBounces = 16;
     public static boolean ommEnabled = false;
     public static int ommBakerLevel = 4;
@@ -353,6 +363,8 @@ public class Options {
 
     // HDR10 output (default: disabled, pure SDR)
     public static boolean hdrEnabled = false;
+    public static boolean hdrOutput = false;
+    public static boolean dlssFrameGeneration = false;
     public static int hdrPeakNits = 1000;          // 400–10000 nits
     public static int hdrPaperWhiteNits = 203;     // 80–500 nits, ITU-R BT.2408 reference white
     public static int hdrUiBrightnessNits = 100;   // 50–300 nits, UI brightness in HDR mode
@@ -2754,6 +2766,7 @@ public class Options {
 
     // --- HDR10 Output ---
     public native static void nativeSetHdrEnabled(boolean enabled, boolean write);
+    public native static void nativeSetDlssFrameGeneration(boolean enabled, boolean write);
 
     public static void setHdrEnabled(boolean enabled, boolean write) {
         if (enabled) {
@@ -2761,6 +2774,7 @@ public class Options {
         }
 
         Options.hdrEnabled = enabled;
+        Options.hdrOutput = enabled;
         nativeSetHdrEnabled(enabled, false);
 
         if (!enabled) {
@@ -2778,6 +2792,25 @@ public class Options {
             }
 
             nativeSetHdrEnabled(enabled, true);
+            overwriteConfig();
+        }
+    }
+
+    public static void setHdrOutput(boolean enabled, boolean write) {
+        setHdrEnabled(enabled, write);
+    }
+
+    public static void setDlssFrameGeneration(boolean enabled, boolean write) {
+        Options.dlssFrameGeneration = enabled;
+        nativeSetDlssFrameGeneration(enabled, write);
+        if (write) {
+            overwriteConfig();
+        }
+    }
+
+    public static void setQualityLevel(QualityLevel level, boolean write) {
+        qualityLevel = level == null ? QualityLevel.BALANCED.getId() : level.getId();
+        if (write) {
             overwriteConfig();
         }
     }
@@ -2856,3 +2889,4 @@ public class Options {
         if (write) overwriteConfig();
     }
 }
+
