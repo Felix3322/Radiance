@@ -223,6 +223,18 @@ processResources {
         }
     }
 
+    doLast {
+        if (builtWindowsCoreDll.exists()) {
+            delete(new File(destinationDir, "core.dll"))
+            copy {
+                from(builtWindowsCoreDll)
+                into(destinationDir)
+                rename { "core.dll" }
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            }
+        }
+    }
+
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": project.minecraft_version,

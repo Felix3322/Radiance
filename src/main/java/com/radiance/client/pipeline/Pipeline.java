@@ -614,6 +614,47 @@ public class Pipeline {
         }
     }
 
+    private static String stripLeadingJavaTag(String yamlText) {
+        if (yamlText == null || !yamlText.startsWith("!!")) {
+            return yamlText;
+        }
+        int newlineIndex = yamlText.indexOf('\n');
+        if (newlineIndex < 0) {
+            return "";
+        }
+        return yamlText.substring(newlineIndex + 1);
+    }
+
+    private static PipelineStorage loadPipelineStorageCompat(String yamlText) {
+        LoaderOptions loaderOptions = new LoaderOptions();
+        TagInspector tagInspector = tag -> tag.getClassName()
+            .startsWith("com.radiance.client.pipeline");
+        loaderOptions.setTagInspector(tagInspector);
+        Constructor constructor = new Constructor(PipelineStorage.class, loaderOptions);
+        Yaml typedYaml = new Yaml(constructor);
+
+        try {
+            return typedYaml.load(yamlText);
+        } catch (Exception directLoadError) {
+            String sanitizedYamlText = stripLeadingJavaTag(yamlText);
+            Object rawStorage = new Yaml().load(sanitizedYamlText);
+            if (rawStorage instanceof Map<?, ?> rootMap) {
+                Object nestedPipeline = rootMap.get("pipeline");
+                if (nestedPipeline != null) {
+                    String nestedYamlText = new Yaml().dump(nestedPipeline);
+                    return typedYaml.load(nestedYamlText);
+                }
+
+                if (rootMap.containsKey("mode")) {
+                    RadianceClient.LOGGER.warn(
+                        "Saved pipeline uses metadata wrapper format without an embedded custom pipeline. Rebuilding default pipeline.");
+                    return null;
+                }
+            }
+            throw directLoadError;
+        }
+    }
+
     public static void loadPipeline() {
         try {
             recollectNativeModules();
@@ -632,15 +673,7 @@ public class Pipeline {
         PipelineStorage pipelineStorage;
         try {
             String yamlText = Files.readString(PIPELINE_CONFIG_PATH, StandardCharsets.UTF_8);
-
-            LoaderOptions loaderOptions = new LoaderOptions();
-            TagInspector tagInspector = tag -> tag.getClassName()
-                .startsWith("com.radiance.client.pipeline");
-            loaderOptions.setTagInspector(tagInspector);
-            Constructor constructor = new Constructor(PipelineStorage.class, loaderOptions);
-            Yaml yaml = new Yaml(constructor);
-
-            pipelineStorage = yaml.load(yamlText);
+            pipelineStorage = loadPipelineStorageCompat(yamlText);
         } catch (Exception e) {
             RadianceClient.LOGGER.error("Error while loading pipeline.", e);
             assembleDefault();

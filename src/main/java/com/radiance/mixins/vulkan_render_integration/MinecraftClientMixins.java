@@ -8,6 +8,7 @@ import com.radiance.client.proxy.vulkan.RendererProxy;
 import com.radiance.client.proxy.vulkan.TextureProxy;
 import com.radiance.client.proxy.world.ChunkProxy;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
@@ -48,17 +49,28 @@ public class MinecraftClientMixins {
         at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;initRenderer(IZ)V"))
     public void initRenderer(int debugVerbosity, boolean debugSync) {
         long stackSize = 512 * 1024 * 1024; // 32MB
+        AtomicReference<Throwable> initFailure = new AtomicReference<>();
         Runnable myRunnable = () -> {
-            RendererProxy.initRenderer(window);
-            Pipeline.collectNativeModules();
+            try {
+                RendererProxy.initRenderer(window);
+                Pipeline.collectNativeModules();
+            } catch (Throwable throwable) {
+                initFailure.set(throwable);
+            }
         };
 
-        Thread myThread = new Thread(null, myRunnable, "", stackSize);
+        Thread myThread = new Thread(null, myRunnable, "Radiance-Vulkan-Init", stackSize);
         myThread.start();
         try {
             myThread.join();
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        }
+
+        Throwable failure = initFailure.get();
+        if (failure != null) {
+            throw new RuntimeException("Failed to initialize Radiance Vulkan renderer", failure);
         }
 
         Pipeline.loadPipeline();
